@@ -179,6 +179,8 @@ const integrationConsumeSetting = ref<UmsIntegrationConsumeSetting>(
 const memberIntegration = ref(0)
 // 购物车ID列表
 const cartIds = ref<number[]>([])
+// 防重令牌
+const orderToken = ref('')
 
 // ===== 加载数据 =====
 // 生成确认单信息
@@ -196,6 +198,8 @@ const loadData = async () => {
     calcAmount.value = data.calcAmount
     integrationConsumeSetting.value = data.integrationConsumeSetting
     memberIntegration.value = data.memberIntegration
+    // 保存防重令牌，提交订单时回传
+    orderToken.value = data.token
   } catch (e) {
     console.error('加载确认单失败', e)
   }
@@ -257,6 +261,7 @@ const handleSubmit = async () => {
     cartIds: cartIds.value.map(Number),
     memberReceiveAddressId: currentAddress.value?.id as number | undefined,
     useIntegration: useIntegration.value,
+    token: orderToken.value,
   }
   if (currCoupon.value != null) {
     orderParam.couponId = currCoupon.value.id

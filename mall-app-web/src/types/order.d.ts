@@ -123,6 +123,8 @@ export type ConfirmOrderResult = {
   integrationConsumeSetting: UmsIntegrationConsumeSetting
   /** 会员持有的积分 */
   memberIntegration: number
+  /** 防重令牌 */
+  token: string
 }
 
 /** 创建订单请求参数（对应API文档 OrderParam） */
@@ -137,6 +139,8 @@ export type OrderParam = {
   memberReceiveAddressId?: number
   /** 使用的积分数 */
   useIntegration: number
+  /** 防重令牌 */
+  token: string
 }
 
 /** 生成订单返回结果（对应后端 OrderResult） */
