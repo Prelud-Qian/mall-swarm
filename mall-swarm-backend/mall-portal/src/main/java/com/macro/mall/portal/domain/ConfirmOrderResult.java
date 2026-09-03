@@ -23,6 +23,8 @@ public class ConfirmOrderResult {
     private Integer memberIntegration;
     //计算的金额
     private CalcAmount calcAmount;
+    // 防重令牌
+    private String token;
 
     public List<CartPromotionItem> getCartPromotionItemList() {
         return cartPromotionItemList;
@@ -70,6 +72,14 @@ public class ConfirmOrderResult {
 
     public void setCalcAmount(CalcAmount calcAmount) {
         this.calcAmount = calcAmount;
+    }
+
+    public String getToken() {
+        return token;
+    }
+
+    public void setToken(String token) {
+        this.token = token;
     }
 
     public static class CalcAmount{

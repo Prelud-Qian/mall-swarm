@@ -37,4 +37,8 @@ public interface PortalOrderDao {
      */
     int releaseSkuStockLock(@Param("itemList") List<OmsOrderItem> orderItemList);
 
+    /**
+     * 原子锁定SKU库存，真实库存充足才更新
+     */
+    int lockSkuStock(@Param("skuId") Long skuId, @Param("quantity") Integer quantity);
 }

@@ -6,6 +6,20 @@ spring:
       config:
         server-addr: localhost:8848
         file-extension: yaml
-  config:
-    import:
-      - nacos:mall-demo-dev.yaml?refreshEnabled=true
+        import-check:
+          enabled: false
+  datasource:
+    url: jdbc:mysql://192.168.88.129:3306/mall?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&useSSL=false
+    username: root
+    password: 070716wzq
+  data:
+    redis:
+      host: 192.168.88.129
+      port: 6379
+logging:
+  level:
+    root: info
+    com.macro.mall: debug
+logstash:
+  host: localhost
+  enableInnerLog: false

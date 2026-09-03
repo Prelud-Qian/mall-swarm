@@ -55,6 +55,7 @@
         <knife4j.version>4.5.0</knife4j.version>
         <springdoc-openapi.version>2.8.17</springdoc-openapi.version>
         <sa-token.version>1.42.0</sa-token.version>
+        <redisson.version>3.52.0</redisson.version>
         <commons-lang3.version>3.20.0</commons-lang3.version>
         <mall-common.version>1.0-SNAPSHOT</mall-common.version>
         <mall-mbg.version>1.0-SNAPSHOT</mall-mbg.version>
@@ -106,6 +107,12 @@
                 <version>${spring-cloud-alibaba.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
+            </dependency>
+            <!--nacos-client 版本对齐本机 Nacos Server 3.2.3（SCA 2025.0.0.0 默认 3.0.3 无法读取 3.2.3 服务端配置）-->
+            <dependency>
+                <groupId>com.alibaba.nacos</groupId>
+                <artifactId>nacos-client</artifactId>
+                <version>3.2.3</version>
             </dependency>
             <!--mall通用模块-->
             <dependency>

@@ -42,8 +42,6 @@ public class OmsPortalOrderServiceImpl implements OmsPortalOrderService {
     @Autowired
     private UmsIntegrationConsumeSettingMapper integrationConsumeSettingMapper;
     @Autowired
-    private PmsSkuStockMapper skuStockMapper;
-    @Autowired
     private SmsCouponHistoryDao couponHistoryDao;
     @Autowired
     private OmsOrderMapper orderMapper;
@@ -57,6 +55,13 @@ public class OmsPortalOrderServiceImpl implements OmsPortalOrderService {
     private String REDIS_KEY_ORDER_ID;
     @Value("${redis.database}")
     private String REDIS_DATABASE;
+
+    @Value("${redis.key.orderToken}")
+    private String REDIS_KEY_ORDER_TOKEN;
+
+    @Value("${redis.expire.orderToken}")
+    private Long REDIS_EXPIRE_ORDER_TOKEN;
+
     @Autowired
     private PortalOrderDao portalOrderDao;
     @Autowired
@@ -87,12 +92,24 @@ public class OmsPortalOrderServiceImpl implements OmsPortalOrderService {
         //计算总金额、活动优惠、应付金额
         ConfirmOrderResult.CalcAmount calcAmount = calcCartAmount(cartPromotionItemList);
         result.setCalcAmount(calcAmount);
+        // 生成防重令牌
+        String token = UUID.randomUUID().toString().replaceAll("-", "");
+        redisService.set(REDIS_KEY_ORDER_TOKEN + token, 1, REDIS_EXPIRE_ORDER_TOKEN);
+        result.setToken(token);
         return result;
     }
 
     @Override
     public Map<String, Object> generateOrder(OrderParam orderParam) {
         List<OmsOrderItem> orderItemList = new ArrayList<>();
+
+        // 校验防重令牌
+        String orderTokenKey = REDIS_KEY_ORDER_TOKEN + orderParam.getToken();
+        Object tokenValue = redisService.getAndDelete(orderTokenKey);
+        if (tokenValue == null){
+            Asserts.fail("防重令牌校验失败，请勿重复提交");
+        }
+
         //校验收货地址
         if(orderParam.getMemberReceiveAddressId()==null){
             Asserts.fail("请选择收货地址！");
@@ -726,9 +743,10 @@ public class OmsPortalOrderServiceImpl implements OmsPortalOrderService {
      */
     private void lockStock(List<CartPromotionItem> cartPromotionItemList) {
         for (CartPromotionItem cartPromotionItem : cartPromotionItemList) {
-            PmsSkuStock skuStock = skuStockMapper.selectByPrimaryKey(cartPromotionItem.getProductSkuId());
-            skuStock.setLockStock(skuStock.getLockStock() + cartPromotionItem.getQuantity());
-            skuStockMapper.updateByPrimaryKeySelective(skuStock);
+            int count = portalOrderDao.lockSkuStock(cartPromotionItem.getProductSkuId(), cartPromotionItem.getQuantity());
+            if (count == 0){
+                Asserts.fail("库存不足，无法下单");
+            }
         }
     }
 
