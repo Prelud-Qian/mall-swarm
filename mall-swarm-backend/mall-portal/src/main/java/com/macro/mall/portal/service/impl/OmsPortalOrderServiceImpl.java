@@ -343,10 +343,16 @@ public class OmsPortalOrderServiceImpl implements OmsPortalOrderService {
 
     @Override
     public void sendDelayMessageCancelOrder(Long orderId) {
-        //获取订单超时时间
+        // 获取订单超时时间：秒杀订单用flashOrderOvertime，普通订单用normalOrderOvertime
+        OmsOrder order = orderMapper.selectByPrimaryKey(orderId);
         OmsOrderSetting orderSetting = orderSettingMapper.selectByPrimaryKey(1L);
-        long delayTimes = orderSetting.getNormalOrderOvertime() * 60 * 1000;
-        //发送延迟消息
+        long delayTimes;
+        if (order.getOrderType() != null && order.getOrderType() == 1) {
+            delayTimes = orderSetting.getFlashOrderOvertime() * 60 * 1000;
+        } else {
+            delayTimes = orderSetting.getNormalOrderOvertime() * 60 * 1000;
+        }
+        // 发送延迟消息
         cancelOrderSender.sendMessage(orderId, delayTimes);
     }
 
