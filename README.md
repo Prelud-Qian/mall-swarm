@@ -34,6 +34,14 @@ mall 商城全家桶：Spring Cloud 微服务后端 + 后台管理前端 + 移�
 
 > 注意：开发环境下两个前端通过网关访问后端（admin-web → gateway:8201/mall-admin，app-web → gateway:8201/mall-portal）。
 
+## 已实现的功能增强
+
+- **订单提交防重令牌**：确认订单页生成 UUID 令牌存 Redis，提交订单原子取走校验，防重复下单
+- **并发锁库存防超卖**：下单锁库存用条件 UPDATE 原子 SQL（`lock_stock + q WHERE stock - lock_stock >= q`），0 行即库存不足
+- **RabbitMQ 延时队列自动关单**：下单发 TTL 消息，超时未支付自动关单并释放锁定库存；消费失败自动重试 3 次，耗尽转死信队列兜底
+- **秒杀下单闭环**：信号量限流 + Redis Lua 原子扣库存 + 一人一单限购 + 条件 UPDATE 兜底（`POST /mall-portal/flashPromotion/order/generate`）
+- **Redisson 使用 demo**（mall-demo）：分布式锁基础使用、分布式锁 + DB 乐观锁扣库存演示
+
 ## 更多信息
 
 - 后端细节：[mall-swarm-backend/CLAUDE.md](mall-swarm-backend/CLAUDE.md)
