@@ -29,13 +29,16 @@ mall-swarm 微服务商城（fork 自 macrozheng/mall-swarm），已升级 Sprin
 | mall-admin | 8080 | 后台管理服务（MyBatis + Druid + PageHelper） |
 | mall-portal | 8085 | 前台商城（MySQL + MongoDB + RabbitMQ） |
 | mall-search | 8081 | 商品搜索（spring-data-elasticsearch） |
-| mall-demo | 8082 | Feign 远程调用示例 |
+| mall-demo | 8082 | Feign 远程调用示例 + Redisson 分布式锁 demo |
 | mall-monitor | 8101 | Spring Boot Admin 监控中心（只注册 Nacos，不读 Nacos 配置） |
 
 ### 关键机制
 
 - **注册与配置**：所有服务注册到 Nacos（默认 localhost:8848）。dev 环境通过 `spring.config.import: nacos:mall-{service}-dev.yaml` 从 Nacos 配置中心拉配置（dataId 格式固定）；`config/{service}/` 目录是这些配置的导出副本，改动需两边同步。mall-monitor 只注册不读配置。
 - **认证链路**：mall-auth 用 OpenFeign 调 mall-admin（UmsAdminService）/ mall-portal（UmsMemberService）校验账号，签发 Sa-Token（token-name: `Authorization`、前缀 `Bearer`、存 Redis，sa-token-redis-jackson + JWT）。mall-gateway 用 sa-token-reactor 在网关层拦截校验：白名单在 gateway 的 `secure.ignore.urls`，路由拦截见 `SaTokenConfig`，权限加载见 `StpInterfaceImpl`。
+- **订单防重令牌**：确认订单页 `preGenerateOrder` 生成 UUID 令牌存 Redis（key 前缀、过期时间由 `redis.key.orderToken`、`redis.expire.orderToken` 配置），提交订单 `generateOrder` 用 `RedisService.getAndDelete` 原子取走并校验，取不到即拒绝，防重复下单。
+- **并发锁库存（原子 SQL）**：下单 `lockStock` 对每个商品执行 `PortalOrderDao.lockSkuStock`（条件 UPDATE：`lock_stock = lock_stock + q WHERE stock - lock_stock >= q`），受影响 0 行即库存不足；支付成功 `updateSkuStock` 同时扣真实库存与锁定库存，取消/超时 `releaseSkuStockLock` 只释放锁定。注意超时自动取消的定时任务 `OrderTimeOutCancelTask` 当前被注释未启用。
+- **Redisson demo（mall-demo）**：`/redisson/noLock`、`/redisson/withLock`（20 线程并发自增计数器，无锁版丢更新、加锁版精确）；`/redisson/stockDeductWithoutLock`（超卖对照）、`/redisson/stockDeductWithLock`（分布式锁 + DB 乐观锁精确扣减，乐观锁 SQL 见 `SkuStockDao.deductStock`）、`/redisson/stockReset`（重置库存，便于反复演示）。
 - **路由规则**：gateway 按 `/mall-{service}/**` 前缀 `lb://` 路由并 `StripPrefix=1`。
 - **API 文档**：Knife4j 在 gateway 聚合（discover 模式，排除 mall-monitor），入口 http://localhost:8201/doc.html；各服务另配 springdoc。
 - **数据库**：单库 mall（初始化脚本 `document/sql/mall.sql`），业务模块 Mapper XML 位于 `classpath:dao/*.xml` 和 `classpath*:com/**/mapper/*.xml`。
@@ -44,7 +47,7 @@ mall-swarm 微服务商城（fork 自 macrozheng/mall-swarm），已升级 Sprin
 ## 约定
 
 - 依赖版本统一在 root pom 的 `properties` 管理（Spring Boot 3.5.14 / Spring Cloud 2025.0.2 / Spring Cloud Alibaba 2025.0.0.0），不要在子模块单独写版本号。
-- Java 17；编译统一加 `-parameters`（Spring Boot 3.2+ 参数名保留要求）。
+- Java 17；编译统一加 `-parameters`（Spring Boot 3.2+ 参数名保留要求）。本机默认 `JAVA_HOME` 指向 JDK 8，直接 `mvn` 构建会报"无效的目标发行版: 17"，需显式指定 JDK 17（如 `JAVA_HOME="$HOME/.jdks/ms-17.0.15"`）再构建/运行。
 - 每服务三份配置：`application.yml`（端口、通用配置）、`application-dev.yml`（本地 + Nacos config import）、`application-prod.yml`（生产）。
 - 本地默认依赖：MySQL root/root、Redis 无密码、Nacos localhost:8848、MinIO minioadmin/minioadmin。
 - 本地仓库使用阿里云 Maven 镜像加速（root pom 已配置）。

@@ -72,8 +72,19 @@ public class FlashPromotionOrderServiceImpl implements FlashPromotionOrderServic
             Asserts.fail("不在秒杀场次时间内");
         }
 
+        /**
+         * 涉及共享资源（信号量、计数器、库存 Key、数据库记录）的操作，是串行化的（通过原子操作或锁）。
+         * 涉及本地变量（订单对象、查询结果）的操作，是完全独立的，线程间互不干扰。
+         */
+
+        /**
+         * 每个线程独立执行
+         */
         UmsMember member = memberService.getCurrentMember();
 
+        /**
+         * 多线程共享
+         */
         // 2. 限流：每个场次一个信号量
         // 使用 Redisson 的分布式信号量（Semaphore）来实现秒杀限流
         RSemaphore semaphore = redissonClient.getSemaphore("seckill:semaphore:" + session.getId());
@@ -100,6 +111,7 @@ public class FlashPromotionOrderServiceImpl implements FlashPromotionOrderServic
             // 这相当于在 Redis 层拦截了超量的请求，避免大量请求涌入数据库。
             Asserts.fail("秒杀太火爆，请稍后再试");
         }
+
 
         // 获取成功  许可证 -1   执行下单逻辑（信号量继续持有）
         boolean stockDeducted = false;
