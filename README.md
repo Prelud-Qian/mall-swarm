@@ -40,10 +40,13 @@ mall 商城全家桶：Spring Cloud 微服务后端 + 后台管理前端 + 移�
 - **并发锁库存防超卖**：下单锁库存用条件 UPDATE 原子 SQL（`lock_stock + q WHERE stock - lock_stock >= q`），0 行即库存不足
 - **RabbitMQ 延时队列自动关单**：下单发 TTL 消息，超时未支付自动关单并释放锁定库存；消费失败自动重试 3 次，耗尽转死信队列兜底
 - **秒杀下单闭环**：信号量限流 + Redis Lua 原子扣库存 + 一人一单限购 + 条件 UPDATE 兜底（`POST /mall-portal/flashPromotion/order/generate`）
+- **商品详情缓存三兄弟防护**：互斥锁防击穿、空值缓存防穿透、随机过期防雪崩，管理端改商品后缓存自动失效
 - **Redisson 使用 demo**（mall-demo）：分布式锁基础使用、分布式锁 + DB 乐观锁扣库存演示
 
 ## 更多信息
 
+- 功能增强总览（每个功能的方案、文件、验证结果、踩坑记录）：[docs/ENHANCEMENTS.md](docs/ENHANCEMENTS.md)
+- 秒杀设计文档：[docs/superpowers/specs/2026-09-04-seckill-sync-design.md](docs/superpowers/specs/2026-09-04-seckill-sync-design.md)
 - 后端细节：[mall-swarm-backend/CLAUDE.md](mall-swarm-backend/CLAUDE.md)
 - 后台管理前端细节：[mall-admin-web/CLAUDE.md](mall-admin-web/CLAUDE.md)
 - 移动端细节：[mall-app-web/CLAUDE.md](mall-app-web/CLAUDE.md)
