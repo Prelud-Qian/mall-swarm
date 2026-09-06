@@ -2,6 +2,7 @@ package com.macro.mall.service.impl;
 
 import cn.hutool.core.collection.CollUtil;
 import com.github.pagehelper.PageHelper;
+import com.macro.mall.common.service.RedisService;
 import com.macro.mall.dao.*;
 import com.macro.mall.dto.PmsProductParam;
 import com.macro.mall.dto.PmsProductQueryParam;
@@ -30,6 +31,8 @@ import java.util.stream.Collectors;
 @Service
 public class PmsProductServiceImpl implements PmsProductService {
     private static final Logger LOGGER = LoggerFactory.getLogger(PmsProductServiceImpl.class);
+    @Autowired
+    private RedisService redisService;
     @Autowired
     private PmsProductMapper productMapper;
     @Autowired
@@ -156,6 +159,8 @@ public class PmsProductServiceImpl implements PmsProductService {
         prefrenceAreaExample.createCriteria().andProductIdEqualTo(id);
         prefrenceAreaProductRelationMapper.deleteByExample(prefrenceAreaExample);
         relateAndInsertList(prefrenceAreaProductRelationDao, productParam.getPrefrenceAreaProductRelationList(), id);
+        // 缓存一致性：商品更新成功后删除详情缓存（失效策略：先改DB后删缓存）
+        redisService.del("portal:product:detail:" + id);
         count = 1;
         return count;
     }
@@ -285,7 +290,12 @@ public class PmsProductServiceImpl implements PmsProductService {
         record.setDeleteStatus(deleteStatus);
         PmsProductExample example = new PmsProductExample();
         example.createCriteria().andIdIn(ids);
-        return productMapper.updateByExampleSelective(record, example);
+        int count = productMapper.updateByExampleSelective(record, example);
+        // 缓存一致性：逻辑删除商品后删除详情缓存
+        for (Long id : ids) {
+            redisService.del("portal:product:detail:" + id);
+        }
+        return count;
     }
 
     @Override
