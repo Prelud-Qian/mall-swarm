@@ -2,6 +2,8 @@ package com.macro.mall.service.impl;
 
 import cn.hutool.core.collection.CollUtil;
 import com.github.pagehelper.PageHelper;
+import com.macro.mall.common.domain.ProductSyncMessage;
+import com.macro.mall.common.domain.SearchQueueEnum;
 import com.macro.mall.common.service.RedisService;
 import com.macro.mall.dao.*;
 import com.macro.mall.dto.PmsProductParam;
@@ -12,6 +14,7 @@ import com.macro.mall.model.*;
 import com.macro.mall.service.PmsProductService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.amqp.core.AmqpTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
@@ -67,6 +70,9 @@ public class PmsProductServiceImpl implements PmsProductService {
     private PmsProductDao productDao;
     @Autowired
     private PmsProductVertifyRecordDao productVertifyRecordDao;
+    @Autowired
+    private AmqpTemplate amqpTemplate;
+
 
     @Override
     public int create(PmsProductParam productParam) {
@@ -263,7 +269,16 @@ public class PmsProductServiceImpl implements PmsProductService {
         record.setPublishStatus(publishStatus);
         PmsProductExample example = new PmsProductExample();
         example.createCriteria().andIdIn(ids);
-        return productMapper.updateByExampleSelective(record, example);
+        int count = productMapper.updateByExampleSelective(record, example);
+        // 上下架后发消息通知search服务同步/删除索引
+        for (Long id : ids) {
+            ProductSyncMessage message = new ProductSyncMessage();
+            message.setProductId(id);
+            message.setPublishStatus(publishStatus);
+            amqpTemplate.convertAndSend(SearchQueueEnum.PRODUCT_SYNC.getExchange(),
+                    SearchQueueEnum.PRODUCT_SYNC.getRouteKey(), message);
+        }
+        return count;
     }
 
     @Override

@@ -50,7 +50,20 @@
 - **关键文件**：`mall-portal/PmsPortalProductServiceImpl.detail`（缓存外壳 + getDetailFromDb）、`mall-admin/PmsProductServiceImpl`（缓存失效）
 - **验证**：三轮测试 + 一次重启——首查 7+ 次 SQL 回源、二查 0 次；不存在 id 空值缓存 300 秒 0 回源；DEL 后 20 并发恰好 1 次回源；admin 改商品缓存立即失效
 
-## 6. Redisson 学习 demo（mall-demo）
+## 6. ES 检索增强（mall-search）
+
+- **解决的问题**：搜索只支持关键词+品牌+分类；筛选面板与商品范围脱节；商品上下架后索引靠手动 importAll
+- **方案**：
+  - 属性筛选 + 价格区间：nested 查询（attrValueList 三个条件落在同一条属性记录）+ range 查询 number 变体，均在 filter 上下文不干扰评分
+  - 聚合联动筛选：品牌/分类筛选条件并入 query，聚合基于筛选后结果集收缩
+  - 上下架 MQ 自动同步：admin 改 publish_status 后发 JSON 消息，search 消费——上架建索引、下架删索引
+- **关键文件**：
+  - mall-search：`EsProductServiceImpl.search/searchRelatedInfo`、`EsProductController`、新增 `RabbitMqConfig`、`ProductSyncReceiver`
+  - mall-admin：`PmsProductServiceImpl.updatePublishStatus`（发消息）、新增 `RabbitMqConfig`
+  - mall-common 新增：`ProductSyncMessage`、`SearchQueueEnum`（跨服务共享契约）
+- **验证**：8 用例全过且与 ES 原生 DSL 对照一致；聚合随 brandId 收缩（8 品牌→1 品牌）；下架 3 秒 ES 404、上架 3 秒恢复
+
+## 7. Redisson 学习 demo（mall-demo）
 
 - **内容**：① 基础使用——20 线程并发自增计数器，无锁版丢更新（<20）vs 加锁版精确（=20）；② 业务场景——分布式锁 + DB 乐观锁并发扣库存，无锁版复现超卖、锁+乐观锁版精确扣减
 - **关键文件**：`mall-demo/service/impl/RedissonDemoServiceImpl.java`、`RedissonStockDemoServiceImpl.java`、`dao/SkuStockDao.java`

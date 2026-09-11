@@ -4,6 +4,7 @@ import com.macro.mall.search.domain.EsProduct;
 import com.macro.mall.search.domain.EsProductRelatedInfo;
 import org.springframework.data.domain.Page;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 /**
@@ -39,7 +40,7 @@ public interface EsProductService {
     /**
      * 根据关键字搜索名称或者副标题复合查询
      */
-    Page<EsProduct> search(String keyword, Long brandId, Long productCategoryId, Integer pageNum, Integer pageSize,Integer sort);
+    Page<EsProduct> search(String keyword, Long brandId, Long productCategoryId, Long productAttrId, String productAttrValue, BigDecimal priceMin, BigDecimal priceMax, Integer pageNum, Integer pageSize, Integer sort);
 
     /**
      * 根据商品id推荐相关商品
@@ -49,5 +50,5 @@ public interface EsProductService {
     /**
      * 获取搜索词相关品牌、分类、属性
      */
-    EsProductRelatedInfo searchRelatedInfo(String keyword);
+    EsProductRelatedInfo searchRelatedInfo(String keyword, Long brandId, Long productCategoryId);
 }

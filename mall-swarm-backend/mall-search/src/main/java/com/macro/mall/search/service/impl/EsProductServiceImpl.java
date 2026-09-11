@@ -23,6 +23,7 @@ import org.springframework.data.elasticsearch.core.SearchHits;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
 
+import java.math.BigDecimal;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -90,24 +91,45 @@ public class EsProductServiceImpl implements EsProductService {
     }
 
     @Override
-    public Page<EsProduct> search(String keyword, Long brandId, Long productCategoryId, Integer pageNum, Integer pageSize,Integer sort) {
+    public Page<EsProduct> search(String keyword, Long brandId, Long productCategoryId, Long productAttrId, String productAttrValue, BigDecimal priceMin, BigDecimal priceMax, Integer pageNum, Integer pageSize, Integer sort) {
         Pageable pageable = PageRequest.of(pageNum, pageSize);
         NativeQueryBuilder nativeQueryBuilder = new NativeQueryBuilder();
         //分页
         nativeQueryBuilder.withPageable(pageable);
-        //过滤
-        if (brandId != null || productCategoryId != null) {
-            Query boolQuery = QueryBuilders.bool(builder -> {
-                if (brandId != null) {
-                    builder.must(QueryBuilders.term(b -> b.field("brandId").value(brandId)));
-                }
-                if (productCategoryId != null) {
-                    builder.must(QueryBuilders.term(b -> b.field("productCategoryId").value(productCategoryId)));
-                }
-                return builder;
-            });
-            nativeQueryBuilder.withFilter(boolQuery);
+
+        //过滤：品牌、分类、属性、价格区间
+        Query boolFilter = QueryBuilders.bool(builder -> {
+            if (brandId != null){
+                builder.must(QueryBuilders.term(b -> b.field("brandId").value(brandId)));
+            }
+            if (productCategoryId != null) {
+                builder.must(QueryBuilders.term(b -> b.field("productCategoryId").value(productCategoryId)));
+            }
+            // 属性筛选：nested查询，三个条件必须落在同一条属性记录上（属性ID+值+type=1）
+            if (productAttrId != null && StrUtil.isNotEmpty(productAttrValue)){
+            builder.must(QueryBuilders.nested(n -> n
+                    .path("attrValueList")
+                    .query(QueryBuilders.bool(inner -> inner
+                            .must(QueryBuilders.term(t -> t.field("attrValueList.productAttributeId").value(productAttrId)))
+                            .must(QueryBuilders.term(t -> t.field("attrValueList.value").value(productAttrValue)))
+                            .must(QueryBuilders.term(t -> t.field("attrValueList.type").value(1)))))));
+            }
+            // 价格区间：8.18客户端RangeQuery是TaggedUnion，数值区间用number变体
+            if (priceMin != null || priceMax != null) {
+                builder.must(QueryBuilders.range(r -> r.number(n -> n
+                        .field("price")
+                        .gte(priceMin != null ? priceMin.doubleValue() : null)
+                        .lte(priceMax != null ? priceMax.doubleValue() : null))));
+            }
+            return builder;
+        });
+
+        if (brandId != null || productCategoryId != null
+                || (productAttrId != null && StrUtil.isNotEmpty(productAttrValue))
+                || priceMin != null || priceMax != null) {
+            nativeQueryBuilder.withFilter(boolFilter);
         }
+
         //搜索
         if (StrUtil.isEmpty(keyword)) {
             nativeQueryBuilder.withQuery(QueryBuilders.matchAll(builder -> builder));
@@ -156,6 +178,7 @@ public class EsProductServiceImpl implements EsProductService {
         List<EsProduct> searchProductList = searchHits.stream().map(SearchHit::getContent).collect(Collectors.toList());
         return new PageImpl<>(searchProductList,pageable,searchHits.getTotalHits());
     }
+
 
     @Override
     public Page<EsProduct> recommend(Long id, Integer pageNum, Integer pageSize) {
@@ -212,14 +235,26 @@ public class EsProductServiceImpl implements EsProductService {
     }
 
     @Override
-    public EsProductRelatedInfo searchRelatedInfo(String keyword) {
+    public EsProductRelatedInfo searchRelatedInfo(String keyword, Long brandId, Long productCategoryId) {
         NativeQueryBuilder nativeQueryBuilder = new NativeQueryBuilder();
-        //搜索条件
-        if(StrUtil.isEmpty(keyword)){
-            nativeQueryBuilder.withQuery(QueryBuilders.matchAll(builder -> builder));
-        }else{
-            nativeQueryBuilder.withQuery(QueryBuilders.multiMatch(builder -> builder.fields("name","subTitle","keywords").query(keyword)));
-        }
+
+        //搜索条件 + 筛选：聚合基于"关键词+已选筛选"后的商品集合统计（联动筛选）
+        Query boolQuery = QueryBuilders.bool(builder -> {
+            if (StrUtil.isEmpty(keyword)){
+                builder.must(QueryBuilders.matchAll(b -> b));
+            }else {
+                builder.must(QueryBuilders.multiMatch(m -> m.fields("name", "subTitle", "keywords").query(keyword)));
+            }
+            if (brandId != null) {
+                builder.filter(QueryBuilders.term(t -> t.field("brandId").value(brandId)));
+            }
+            if (productCategoryId != null) {
+                builder.filter(QueryBuilders.term(t -> t.field("productCategoryId").value(productCategoryId)));
+            }
+            return builder;
+        });
+        nativeQueryBuilder.withQuery(boolQuery);
+
         //聚合搜索品牌名称
         nativeQueryBuilder.withAggregation("brandNames",AggregationBuilders.terms(builder -> builder.field("brandName").size(10)));
         //聚合搜索分类名称

@@ -28,7 +28,7 @@ mall-swarm 微服务商城（fork 自 macrozheng/mall-swarm），已升级 Sprin
 | mall-auth | 8401 | 认证中心：登录/注册、签发 token |
 | mall-admin | 8080 | 后台管理服务（MyBatis + Druid + PageHelper） |
 | mall-portal | 8085 | 前台商城（MySQL + MongoDB + RabbitMQ） |
-| mall-search | 8081 | 商品搜索（spring-data-elasticsearch） |
+| mall-search | 8081 | 商品搜索（spring-data-elasticsearch + RabbitMQ 索引同步） |
 | mall-demo | 8082 | Feign 远程调用示例 + Redisson 分布式锁 demo |
 | mall-monitor | 8101 | Spring Boot Admin 监控中心（只注册 Nacos，不读 Nacos 配置） |
 
@@ -41,6 +41,7 @@ mall-swarm 微服务商城（fork 自 macrozheng/mall-swarm），已升级 Sprin
 - **订单超时关单（RabbitMQ 延时队列）**：下单后 `sendDelayMessageCancelOrder` 发 TTL 消息（每单独立过期时间）→ 到期死信转发 `mall.order.cancel` → `CancelOrderReceiver` → `cancelOrder` 幂等关单（仅 status=0）并释放锁定库存、退券还积分；秒杀订单按 `orderType` 用 `flashOrderOvertime`。消费失败自动重试 3 次（2s/4s 退避），耗尽由 `RepublishMessageRecoverer` 转发死信队列 `mall.order.cancel.dlq`（`RabbitMqConfig` 自定义 `rabbitListenerContainerFactory`，关闭了默认无限 requeue）。`OrderTimeOutCancelTask` 定时任务是遗留备用代码（已注释）。
 - **秒杀下单（mall-portal）**：`POST /flashPromotion/order/generate`，管理端秒杀配置复用 `sms_flash_promotion_*` 四表。三层防超卖：`RSemaphore` 每场次信号量限流 → Redis Lua 原子扣额度（`seckill:stock:{relationId}`，SETNX 懒加载预热）→ `lockSkuStock` 条件 UPDATE 兜底；一人一单用 `RAtomicLong` 计数（超限回滚 -1）；订单 `orderType=1` 秒杀价，超时用 `flashOrderOvertime`。场次时间是 TIME 类型，比较需 `DateUtil.getTime()` 归一化。
 - **商品详情缓存（缓存三兄弟）**：`PmsPortalProductServiceImpl.detail` 套缓存外壳，key 为 `portal:product:detail:{id}`，value 为 JSON 完整详情。互斥锁（`lock:cache:product:{id}`）+ 双重检查防击穿；空值缓存（哨兵 `"NULL"`，5 分钟）防穿透；过期时间 30 分钟 + 随机 0~5 分钟防雪崩。缓存一致性：mall-admin 的 `PmsProductServiceImpl.update/updateDeleteStatus` 成功后删缓存 key（失效策略，两服务共用同一 Redis）。
+- **ES 检索增强（mall-search）**：综合搜索支持属性筛选（nested 查询，`attrValueList` 的 ID+值+type=1 同条件）与价格区间（range number 变体，filter 上下文）；`searchRelatedInfo` 聚合随品牌/分类筛选联动（条件并入 query，聚合基于结果集）；商品上下架 MQ 自动同步索引——admin `updatePublishStatus` 发 JSON 消息（队列契约见 mall-common 的 `ProductSyncMessage`/`SearchQueueEnum`），search 的 `ProductSyncReceiver` 消费，上架 `create` 建索引、下架 `delete` 删索引。注意 elasticsearch-java 8.18 的 RangeQuery 是 TaggedUnion，数值区间走 `number` 变体。
 - **Redisson demo（mall-demo）**：`/redisson/noLock`、`/redisson/withLock`（20 线程并发自增计数器，无锁版丢更新、加锁版精确）；`/redisson/stockDeductWithoutLock`（超卖对照）、`/redisson/stockDeductWithLock`（分布式锁 + DB 乐观锁精确扣减，乐观锁 SQL 见 `SkuStockDao.deductStock`）、`/redisson/stockReset`（重置库存，便于反复演示）。
 - **路由规则**：gateway 按 `/mall-{service}/**` 前缀 `lb://` 路由并 `StripPrefix=1`。
 - **API 文档**：Knife4j 在 gateway 聚合（discover 模式，排除 mall-monitor），入口 http://localhost:8201/doc.html；各服务另配 springdoc。

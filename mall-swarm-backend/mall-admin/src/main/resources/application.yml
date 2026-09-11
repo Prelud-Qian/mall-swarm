@@ -21,6 +21,14 @@ spring:
       stat-view-servlet: #访问监控网页的登录用户名和密码
         login-username: druid
         login-password: druid
+
+  rabbitmq:
+    host: 192.168.88.129
+    port: 5672
+    virtual-host: /mall
+    username: mall
+    password: mall
+
   data:
     redis:
       host: 192.168.88.129 # Redis服务器地址
