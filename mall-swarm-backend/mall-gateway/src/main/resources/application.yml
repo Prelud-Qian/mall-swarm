@@ -10,43 +10,46 @@ spring:
       matching-strategy: ant_path_matcher
   cloud:
     gateway:
-      server:
-        webflux:
-          discovery:
-            locator:
-              enabled: true
-              lower-case-service-id: true #使用小写service-id
-          routes: #配置路由路径
-            - id: mall-auth
-              uri: lb://mall-auth
-              predicates:
-                - Path=/mall-auth/**
-              filters:
-                - StripPrefix=1
-            - id: mall-admin
-              uri: lb://mall-admin
-              predicates:
-                - Path=/mall-admin/**
-              filters:
-                - StripPrefix=1
-            - id: mall-portal
-              uri: lb://mall-portal
-              predicates:
-                - Path=/mall-portal/**
-              filters:
-                - StripPrefix=1
-            - id: mall-search
-              uri: lb://mall-search
-              predicates:
-                - Path=/mall-search/**
-              filters:
-                - StripPrefix=1
-            - id: mall-demo
-              uri: lb://mall-demo
-              predicates:
-                - Path=/mall-demo/**
-              filters:
-                - StripPrefix=1
+      discovery:
+        locator:
+          enabled: false # 显式路由已覆盖全部服务；动态路由会与显式路由同id冲突，覆盖其filter配置
+      routes: #配置路由路径
+        - id: mall-auth
+          uri: lb://mall-auth
+          predicates:
+            - Path=/mall-auth/**
+          filters:
+            - StripPrefix=1
+        - id: mall-admin
+          uri: lb://mall-admin
+          predicates:
+            - Path=/mall-admin/**
+          filters:
+            - StripPrefix=1
+        - id: mall-portal
+          uri: lb://mall-portal
+          predicates:
+            - Path=/mall-portal/**
+          filters:
+            - StripPrefix=1
+            - name: RequestRateLimiter # 网关令牌桶限流：每IP每秒20个请求，桶容量40（应对突发）
+              args:
+                key-resolver: "#{@ipKeyResolver}"   # 限流维度：按IP（SpEL引用②的Bean）
+                redis-rate-limiter.replenishRate: 20  # 每秒补充20个令牌
+                redis-rate-limiter.burstCapacity: 40  # 桶容量40（应对突发）
+                redis-rate-limiter.requestedTokens: 1 # 每请求消耗1个令牌
+        - id: mall-search
+          uri: lb://mall-search
+          predicates:
+            - Path=/mall-search/**
+          filters:
+            - StripPrefix=1
+        - id: mall-demo
+          uri: lb://mall-demo
+          predicates:
+            - Path=/mall-demo/**
+          filters:
+            - StripPrefix=1
   data:
     redis:
       database: 0

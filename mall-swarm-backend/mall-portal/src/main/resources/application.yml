@@ -8,6 +8,14 @@ spring:
   mvc:
     pathmatch:
       matching-strategy: ant_path_matcher
+  cloud:
+    sentinel:
+      eager: true # 启动时立即初始化Sentinel并发心跳，不等第一个请求
+      filter:
+        enabled: true # 注册Web拦截器，所有HTTP请求都过Sentinel
+      transport:
+        dashboard: localhost:8858 # Sentinel控制台地址
+        port: 8720 # 客户端与控制台通信端口（8719被Dashboard自身占用，从8720起）
   datasource:
     url: jdbc:mysql://192.168.88.129:3306/mall?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&useSSL=false
     username: root

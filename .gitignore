@@ -1,2 +1,11 @@
 # 备份的子项目 git 历史目录，不纳入版本控制
 .git.bak/
+
+# IDE 与本地工具
+.idea/
+.gwcheck/
+
+# 运行时产物与日志
+sentinel-dashboard*.jar
+hs_err*.log
+replay_pid*.log

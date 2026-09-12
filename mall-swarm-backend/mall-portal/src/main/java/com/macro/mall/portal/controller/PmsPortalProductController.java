@@ -1,5 +1,8 @@
 package com.macro.mall.portal.controller;
 
+import com.alibaba.csp.sentinel.annotation.SentinelResource;
+import com.alibaba.csp.sentinel.slots.block.BlockException;
+import com.alibaba.csp.sentinel.slots.block.degrade.DegradeException;
 import com.macro.mall.common.api.CommonPage;
 import com.macro.mall.common.api.CommonResult;
 import com.macro.mall.model.PmsProduct;
@@ -55,8 +58,36 @@ public class PmsPortalProductController {
     @Operation(summary = "获取前台商品详情")
     @RequestMapping(value = "/detail/{id}", method = RequestMethod.GET)
     @ResponseBody
+    // 资源名productDetail：限流规则在Dashboard里按这个名字配
+    // 被限流时走productDetailBlockHandler，不再进detail方法体
+    @SentinelResource(value = "productDetail", blockHandler = "productDetailBlockHandler", fallback = "productDetailFallback")
     public CommonResult<PmsPortalProductDetail> detail(@PathVariable Long id) {
         PmsPortalProductDetail productDetail = portalProductService.detail(id);
         return CommonResult.success(productDetail);
     }
+
+    /**
+     * blockHandler = 规则拦截出口（限流 + 熔断，两个规则共用一个出口）
+     * fallback = 业务报错兜底（方法抛异常）
+     */
+
+    /**
+     * 商品详情限流降级方法：请求被拦截时返回"系统繁忙"
+     * 签名规则：参数列表与detail方法完全一致，最后额外加一个BlockException
+     */
+    public CommonResult<PmsPortalProductDetail> productDetailBlockHandler(Long id, BlockException e) {
+        if (e instanceof DegradeException) {
+            return CommonResult.failed("商品详情服务正在恢复，请稍后再试");
+        }
+        return CommonResult.failed("系统繁忙，请稍后再试");
+    }
+
+    /**
+     * 商品详情业务异常兜底方法：方法抛异常时返回友好提示，而不是500
+     * 签名规则：参数与detail一致，末尾加Throwable（与blockHandler的BlockException区分）
+     */
+    public CommonResult<PmsPortalProductDetail> productDetailFallback(Long id, Throwable e) {
+        return CommonResult.failed("商品详情暂时不可用，请稍后再试");
+    }
+
 }
