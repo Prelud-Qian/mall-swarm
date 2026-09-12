@@ -42,6 +42,7 @@ mall 商城全家桶：Spring Cloud 微服务后端 + 后台管理前端 + 移�
 - **秒杀下单闭环**：信号量限流 + Redis Lua 原子扣库存 + 一人一单限购 + 条件 UPDATE 兜底（`POST /mall-portal/flashPromotion/order/generate`）
 - **商品详情缓存三兄弟防护**：互斥锁防击穿、空值缓存防穿透、随机过期防雪崩，管理端改商品后缓存自动失效
 - **ES 检索增强**：属性筛选（nested）+ 价格区间、聚合联动筛选、商品上下架 MQ 自动同步索引
+- **双层限流熔断**：网关 Redis 令牌桶按 IP 限流 + 服务层 Sentinel QPS 流控/异常熔断降级/业务异常透传
 - **Redisson 使用 demo**（mall-demo）：分布式锁基础使用、分布式锁 + DB 乐观锁扣库存演示
 
 ## 更多信息

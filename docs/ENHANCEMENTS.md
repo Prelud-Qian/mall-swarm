@@ -63,7 +63,18 @@
   - mall-common 新增：`ProductSyncMessage`、`SearchQueueEnum`（跨服务共享契约）
 - **验证**：8 用例全过且与 ES 原生 DSL 对照一致；聚合随 brandId 收缩（8 品牌→1 品牌）；下架 3 秒 ES 404、上架 3 秒恢复
 
-## 7. Redisson 学习 demo（mall-demo）
+## 7. Sentinel 限流熔断 + 网关令牌桶限流
+
+- **解决的问题**：无入口流量治理——任何接口可被单用户打爆；无服务层热点接口保护；无异常自动熔断
+- **方案**：双层限流——网关层 RequestRateLimiter 令牌桶（按 IP，20 QPS/burst 40，Redis 存桶），服务层 Sentinel（商品详情 QPS=5、秒杀接口流控 + 异常比例熔断 + 半开恢复）；业务异常透传（ApiException 原样返回）、限流/熔断文案分流（DegradeException 分支）
+- **关键文件**：
+  - mall-gateway：`application.yml`（路由挂 RequestRateLimiter + 修复 routes 层级/关闭动态路由）、新增 `RequestRateLimiterConfig`（ipKeyResolver）
+  - mall-portal：`PmsPortalProductController`、`FlashPromotionOrderController`（@SentinelResource + blockHandler/fallback）、pom/yml
+  - 根目录：`sentinel-dashboard.bat`（控制台 8858，jar 不入库）
+- **验证**：网关 100 并发 72 通/28 拦（429）；Sentinel 30 并发 8 通/22 拦；熔断状态机（打开→快速失败→半开→恢复）实测走通；限购异常透传"每人限购1件"
+- **踩坑**：gateway yml 的 routes 层级错误导致显式路由从未加载；动态路由与显式路由同 id 覆盖 filter；Sentinel 网关适配器与 Gateway 2025 不兼容（改用令牌桶方案）；Dashboard 自身占用 8719 端口；`eager`/`filter.enabled` 默认关闭
+
+## 8. Redisson 学习 demo（mall-demo）
 
 - **内容**：① 基础使用——20 线程并发自增计数器，无锁版丢更新（<20）vs 加锁版精确（=20）；② 业务场景——分布式锁 + DB 乐观锁并发扣库存，无锁版复现超卖、锁+乐观锁版精确扣减
 - **关键文件**：`mall-demo/service/impl/RedissonDemoServiceImpl.java`、`RedissonStockDemoServiceImpl.java`、`dao/SkuStockDao.java`

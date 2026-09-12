@@ -24,7 +24,7 @@ mall-swarm 微服务商城（fork 自 macrozheng/mall-swarm），已升级 Sprin
 | --- | --- | --- |
 | mall-common | - | 共享代码：通用响应/分页对象（api 包）、annotation、exception、log、RedisService 等 |
 | mall-mbg | - | MyBatis Generator 生成的 mall 库 model + mapper，含代码生成器 |
-| mall-gateway | 8201 | Spring Cloud Gateway（WebFlux）统一入口，网关层 Sa-Token 鉴权 |
+| mall-gateway | 8201 | Spring Cloud Gateway（WebFlux）统一入口，网关层 Sa-Token 鉴权 + Redis 令牌桶限流 |
 | mall-auth | 8401 | 认证中心：登录/注册、签发 token |
 | mall-admin | 8080 | 后台管理服务（MyBatis + Druid + PageHelper） |
 | mall-portal | 8085 | 前台商城（MySQL + MongoDB + RabbitMQ） |
@@ -42,6 +42,7 @@ mall-swarm 微服务商城（fork 自 macrozheng/mall-swarm），已升级 Sprin
 - **秒杀下单（mall-portal）**：`POST /flashPromotion/order/generate`，管理端秒杀配置复用 `sms_flash_promotion_*` 四表。三层防超卖：`RSemaphore` 每场次信号量限流 → Redis Lua 原子扣额度（`seckill:stock:{relationId}`，SETNX 懒加载预热）→ `lockSkuStock` 条件 UPDATE 兜底；一人一单用 `RAtomicLong` 计数（超限回滚 -1）；订单 `orderType=1` 秒杀价，超时用 `flashOrderOvertime`。场次时间是 TIME 类型，比较需 `DateUtil.getTime()` 归一化。
 - **商品详情缓存（缓存三兄弟）**：`PmsPortalProductServiceImpl.detail` 套缓存外壳，key 为 `portal:product:detail:{id}`，value 为 JSON 完整详情。互斥锁（`lock:cache:product:{id}`）+ 双重检查防击穿；空值缓存（哨兵 `"NULL"`，5 分钟）防穿透；过期时间 30 分钟 + 随机 0~5 分钟防雪崩。缓存一致性：mall-admin 的 `PmsProductServiceImpl.update/updateDeleteStatus` 成功后删缓存 key（失效策略，两服务共用同一 Redis）。
 - **ES 检索增强（mall-search）**：综合搜索支持属性筛选（nested 查询，`attrValueList` 的 ID+值+type=1 同条件）与价格区间（range number 变体，filter 上下文）；`searchRelatedInfo` 聚合随品牌/分类筛选联动（条件并入 query，聚合基于结果集）；商品上下架 MQ 自动同步索引——admin `updatePublishStatus` 发 JSON 消息（队列契约见 mall-common 的 `ProductSyncMessage`/`SearchQueueEnum`），search 的 `ProductSyncReceiver` 消费，上架 `create` 建索引、下架 `delete` 删索引。注意 elasticsearch-java 8.18 的 RangeQuery 是 TaggedUnion，数值区间走 `number` 变体。
+- **限流与熔断（双层）**：网关层 mall-gateway 的 RequestRateLimiter 令牌桶（mall-portal 路由按 IP 20 QPS/burst 40，见 `RequestRateLimiterConfig.ipKeyResolver`，桶存 Redis）；服务层 mall-portal 用 Sentinel（Dashboard 8858 动态规则，启动见根目录 sentinel-dashboard.bat）——商品详情 productDetail 资源 QPS 限流、秒杀 flashOrder 资源限流+异常比例熔断+半开恢复，blockHandler 区分限流/熔断（DegradeException）、fallback 透传 ApiException 业务消息。注意：Sentinel 网关适配器与 Gateway 2025 不兼容，网关层勿用；gateway yml 的 routes 必须在 `spring.cloud.gateway.routes` 层级且 `discovery.locator.enabled=false`（动态路由同 id 覆盖显式路由 filter）。
 - **Redisson demo（mall-demo）**：`/redisson/noLock`、`/redisson/withLock`（20 线程并发自增计数器，无锁版丢更新、加锁版精确）；`/redisson/stockDeductWithoutLock`（超卖对照）、`/redisson/stockDeductWithLock`（分布式锁 + DB 乐观锁精确扣减，乐观锁 SQL 见 `SkuStockDao.deductStock`）、`/redisson/stockReset`（重置库存，便于反复演示）。
 - **路由规则**：gateway 按 `/mall-{service}/**` 前缀 `lb://` 路由并 `StripPrefix=1`。
 - **API 文档**：Knife4j 在 gateway 聚合（discover 模式，排除 mall-monitor），入口 http://localhost:8201/doc.html；各服务另配 springdoc。
