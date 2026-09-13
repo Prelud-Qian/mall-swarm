@@ -15,9 +15,12 @@ import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -62,6 +65,10 @@ public class PmsPortalProductServiceImpl implements PmsPortalProductService {
     private RedisService redisService;
     @Autowired
     private RedissonClient redissonClient;
+    @Autowired
+    @Qualifier("businessExecutor")
+    private ExecutorService businessExecutor;
+
 
     @Override
     public List<PmsProduct> search(String keyword, Long brandId, Long productCategoryId, Integer pageNum, Integer pageSize, Integer sort) {
@@ -198,44 +205,80 @@ public class PmsPortalProductServiceImpl implements PmsPortalProductService {
             return null; // 查无此商品：返回null，由外层写空值缓存
         }
         result.setProduct(product);
+
+        // 第二层（并行）：六路互不依赖的查询同时执行
         //获取品牌信息
-        PmsBrand brand = brandMapper.selectByPrimaryKey(product.getBrandId());
-        result.setBrand(brand);
+        CompletableFuture<PmsBrand> brandFuture = CompletableFuture.supplyAsync(
+                () -> brandMapper.selectByPrimaryKey(product.getBrandId()), businessExecutor);
+
         //获取商品属性信息
-        PmsProductAttributeExample attributeExample = new PmsProductAttributeExample();
-        attributeExample.createCriteria().andProductAttributeCategoryIdEqualTo(product.getProductAttributeCategoryId());
-        List<PmsProductAttribute> productAttributeList = productAttributeMapper.selectByExample(attributeExample);
-        result.setProductAttributeList(productAttributeList);
+        CompletableFuture<List<PmsProductAttribute>> attrsFuture = CompletableFuture.supplyAsync(() -> {
+            PmsProductAttributeExample attributeExample = new PmsProductAttributeExample();
+            attributeExample.createCriteria().andProductAttributeCategoryIdEqualTo(product.getProductAttributeCategoryId());
+            return productAttributeMapper.selectByExample(attributeExample);
+        }, businessExecutor);
+
+        // 第三层（二级编排）：属性值依赖属性列表，用thenApplyAsync挂在attrsFuture之后
         //获取商品属性值信息
-        if(CollUtil.isNotEmpty(productAttributeList)){
-            List<Long> attributeIds = productAttributeList.stream().map(PmsProductAttribute::getId).collect(Collectors.toList());
+        CompletableFuture<List<PmsProductAttributeValue>> attrValuesFuture = attrsFuture.thenApplyAsync(attrs -> {
+            if (CollUtil.isEmpty(attrs)){
+                return null;
+            }
+            List<Long> attributeIds = attrs.stream().map(PmsProductAttribute::getId).collect(Collectors.toList());
             PmsProductAttributeValueExample attributeValueExample = new PmsProductAttributeValueExample();
             attributeValueExample.createCriteria().andProductIdEqualTo(product.getId())
                     .andProductAttributeIdIn(attributeIds);
-            List<PmsProductAttributeValue> productAttributeValueList = productAttributeValueMapper.selectByExample(attributeValueExample);
-            result.setProductAttributeValueList(productAttributeValueList);
-        }
+            return productAttributeValueMapper.selectByExample(attributeValueExample);
+        }, businessExecutor);
+
         //获取商品SKU库存信息
-        PmsSkuStockExample skuExample = new PmsSkuStockExample();
-        skuExample.createCriteria().andProductIdEqualTo(product.getId());
-        List<PmsSkuStock> skuStockList = skuStockMapper.selectByExample(skuExample);
-        result.setSkuStockList(skuStockList);
+        CompletableFuture<List<PmsSkuStock>> skuFuture = CompletableFuture.supplyAsync(() -> {
+            PmsSkuStockExample skuExample = new PmsSkuStockExample();
+            skuExample.createCriteria().andProductIdEqualTo(product.getId());
+            return skuStockMapper.selectByExample(skuExample);
+        }, businessExecutor);
+
         //商品阶梯价格设置
-        if(product.getPromotionType()==3){
-            PmsProductLadderExample ladderExample = new PmsProductLadderExample();
-            ladderExample.createCriteria().andProductIdEqualTo(product.getId());
-            List<PmsProductLadder> productLadderList = productLadderMapper.selectByExample(ladderExample);
-            result.setProductLadderList(productLadderList);
-        }
+        CompletableFuture<List<PmsProductLadder>> ladderFuture = CompletableFuture.supplyAsync(() -> {
+            if (product.getPromotionType() == 3) {
+                PmsProductLadderExample ladderExample = new PmsProductLadderExample();
+                ladderExample.createCriteria().andProductIdEqualTo(product.getId());
+                return productLadderMapper.selectByExample(ladderExample);
+            }
+            return null;
+        }, businessExecutor);
+
         //商品满减价格设置
-        if(product.getPromotionType()==4){
-            PmsProductFullReductionExample fullReductionExample = new PmsProductFullReductionExample();
-            fullReductionExample.createCriteria().andProductIdEqualTo(product.getId());
-            List<PmsProductFullReduction> productFullReductionList = productFullReductionMapper.selectByExample(fullReductionExample);
-            result.setProductFullReductionList(productFullReductionList);
-        }
+        CompletableFuture<List<PmsProductFullReduction>> fullReductionFuture = CompletableFuture.supplyAsync(() -> {
+            if (product.getPromotionType() == 4) {
+                PmsProductFullReductionExample fullReductionExample = new PmsProductFullReductionExample();
+                fullReductionExample.createCriteria().andProductIdEqualTo(product.getId());
+                return productFullReductionMapper.selectByExample(fullReductionExample);
+            }
+            return null;
+        }, businessExecutor);
+
         //商品可用优惠券
-        result.setCouponList(portalProductDao.getAvailableCouponList(product.getId(),product.getProductCategoryId()));
+        CompletableFuture<List<SmsCoupon>> couponFuture = CompletableFuture.supplyAsync(
+                () -> portalProductDao.getAvailableCouponList(product.getId(), product.getProductCategoryId()),
+                businessExecutor);
+
+        // 统一等待：所有路完成（某路异常会以CompletionException冒出，由缓存互斥锁/Sentinel fallback接住）
+        CompletableFuture.allOf(brandFuture, attrsFuture, attrValuesFuture, skuFuture,
+                ladderFuture, fullReductionFuture, couponFuture).join();
+
+        // 汇总：从每个Future取结果组装（此刻都已完成，join立即返回）
+        result.setBrand(brandFuture.join());
+        result.setProductAttributeList(attrsFuture.join());
+        result.setProductAttributeValueList(attrValuesFuture.join());
+        result.setSkuStockList(skuFuture.join());
+        if (product.getPromotionType() == 3) {
+            result.setProductLadderList(ladderFuture.join());
+        }
+        if (product.getPromotionType() == 4) {
+            result.setProductFullReductionList(fullReductionFuture.join());
+        }
+        result.setCouponList(couponFuture.join());
         return result;
     }
 

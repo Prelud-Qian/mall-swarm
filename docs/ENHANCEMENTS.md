@@ -74,7 +74,14 @@
 - **验证**：网关 100 并发 72 通/28 拦（429）；Sentinel 30 并发 8 通/22 拦；熔断状态机（打开→快速失败→半开→恢复）实测走通；限购异常透传"每人限购1件"
 - **踩坑**：gateway yml 的 routes 层级错误导致显式路由从未加载；动态路由与显式路由同 id 覆盖 filter；Sentinel 网关适配器与 Gateway 2025 不兼容（改用令牌桶方案）；Dashboard 自身占用 8719 端口；`eager`/`filter.enabled` 默认关闭
 
-## 8. Redisson 学习 demo（mall-demo）
+## 8. 商品详情 CompletableFuture 异步编排
+
+- **解决的问题**：缓存 miss 回源时 8 次 DB 查询全串行，回源慢、击穿时唯一回源线程占用互斥锁时间长
+- **方案**：product 主查询作串行根 → 6 路互不依赖查询 `supplyAsync` 并行（brand/attributes/sku/ladder/满减/coupons）→ 属性值用 `thenApplyAsync` 二级编排挂在 attributes 之后 → `allOf().join()` 统一等待 → 汇总组装；独立业务线程池（core 8/max 16/队列 100/CallerRunsPolicy，线程名 businessPool-*），不用共享的 ForkJoinPool.commonPool
+- **关键文件**：新增 `mall-portal/config/BusinessThreadPoolConfig.java`；修改 `PmsPortalProductServiceImpl.getDetailFromDb`
+- **验证**：同一次回源 6+ 条 SQL 分布在 5 个不同 businessPool 线程（日志线程名证实）；回源 356ms；与缓存三兄弟、互斥锁回源形成完整配合链
+
+## 9. Redisson 学习 demo（mall-demo）
 
 - **内容**：① 基础使用——20 线程并发自增计数器，无锁版丢更新（<20）vs 加锁版精确（=20）；② 业务场景——分布式锁 + DB 乐观锁并发扣库存，无锁版复现超卖、锁+乐观锁版精确扣减
 - **关键文件**：`mall-demo/service/impl/RedissonDemoServiceImpl.java`、`RedissonStockDemoServiceImpl.java`、`dao/SkuStockDao.java`
