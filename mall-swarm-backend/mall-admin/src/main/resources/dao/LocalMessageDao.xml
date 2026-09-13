@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.macro.mall.dao.LocalMessageDao">
+    <resultMap id="messageMap" type="com.macro.mall.dto.MallLocalMessage">
+        <id column="id" property="id"/>
+        <result column="exchange" property="exchange"/>
+        <result column="routing_key" property="routingKey"/>
+        <result column="payload" property="payload"/>
+        <result column="status" property="status"/>
+        <result column="retry_count" property="retryCount"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO mall_local_message (exchange, routing_key, payload, status, retry_count)
+        VALUES (#{exchange}, #{routingKey}, #{payload}, 0, 0)
+    </insert>
+
+    <!-- 补发扫描：只捞待发送且重试未超5次的，每次最多100条 -->
+    <select id="listPending" resultMap="messageMap">
+        SELECT id, exchange, routing_key, payload, status, retry_count, create_time, update_time
+        FROM mall_local_message
+        WHERE status = 0 AND retry_count &lt; 5
+        ORDER BY id ASC
+        LIMIT 100
+    </select>
+
+    <update id="markSent">
+        UPDATE mall_local_message SET status = 1 WHERE id = #{id}
+    </update>
+
+    <update id="increaseRetry">
+        UPDATE mall_local_message SET retry_count = retry_count + 1 WHERE id = #{id}
+    </update>
+</mapper>

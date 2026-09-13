@@ -11,12 +11,15 @@ import com.macro.mall.dto.PmsProductQueryParam;
 import com.macro.mall.dto.PmsProductResult;
 import com.macro.mall.mapper.*;
 import com.macro.mall.model.*;
+import com.macro.mall.service.LocalMessageService;
 import com.macro.mall.service.PmsProductService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.AmqpTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
 
@@ -72,7 +75,8 @@ public class PmsProductServiceImpl implements PmsProductService {
     private PmsProductVertifyRecordDao productVertifyRecordDao;
     @Autowired
     private AmqpTemplate amqpTemplate;
-
+    @Autowired
+    private LocalMessageService localMessageService;
 
     @Override
     public int create(PmsProductParam productParam) {
@@ -275,9 +279,16 @@ public class PmsProductServiceImpl implements PmsProductService {
             ProductSyncMessage message = new ProductSyncMessage();
             message.setProductId(id);
             message.setPublishStatus(publishStatus);
-            amqpTemplate.convertAndSend(SearchQueueEnum.PRODUCT_SYNC.getExchange(),
+            localMessageService.saveMessage(SearchQueueEnum.PRODUCT_SYNC.getExchange(),
                     SearchQueueEnum.PRODUCT_SYNC.getRouteKey(), message);
         }
+        // 事务提交后才真正发MQ：避免"事务回滚但消息已发出"的反向不一致
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                localMessageService.sendPending();
+            }
+        });
         return count;
     }
 

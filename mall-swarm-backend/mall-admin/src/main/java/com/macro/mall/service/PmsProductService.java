@@ -49,6 +49,7 @@ public interface PmsProductService {
     /**
      * 批量修改商品上架状态
      */
+    @Transactional
     int updatePublishStatus(List<Long> ids, Integer publishStatus);
 
     /**

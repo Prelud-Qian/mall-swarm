@@ -3255,3 +3255,19 @@ INSERT INTO `ums_role_resource_relation` VALUES (247, 1, 31);
 INSERT INTO `ums_role_resource_relation` VALUES (248, 1, 32);
 
 SET FOREIGN_KEY_CHECKS = 1;
+
+-- ----------------------------
+-- Table structure for mall_local_message（本地消息表：可靠消息投递Outbox）
+-- ----------------------------
+CREATE TABLE IF NOT EXISTS `mall_local_message` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `exchange` varchar(100) NOT NULL COMMENT '交换机',
+  `routing_key` varchar(100) NOT NULL COMMENT '路由键',
+  `payload` text NOT NULL COMMENT '消息体JSON',
+  `status` tinyint(1) NOT NULL DEFAULT 0 COMMENT '0-待发送 1-已发送',
+  `retry_count` int(11) NOT NULL DEFAULT 0 COMMENT '已重试次数',
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_status_retry` (`status`, `retry_count`)
+) ENGINE=InnoDB COMMENT='本地消息表（可靠消息投递）';

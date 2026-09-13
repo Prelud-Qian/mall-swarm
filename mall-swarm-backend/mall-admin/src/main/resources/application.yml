@@ -28,6 +28,7 @@ spring:
     virtual-host: /mall
     username: mall
     password: mall
+    publisher-confirm-type: correlated # 开启发送端确认：异步回调告知"到没到交换机"
 
   data:
     redis:

@@ -81,7 +81,18 @@
 - **关键文件**：新增 `mall-portal/config/BusinessThreadPoolConfig.java`；修改 `PmsPortalProductServiceImpl.getDetailFromDb`
 - **验证**：同一次回源 6+ 条 SQL 分布在 5 个不同 businessPool 线程（日志线程名证实）；回源 356ms；与缓存三兄弟、互斥锁回源形成完整配合链
 
-## 9. Redisson 学习 demo（mall-demo）
+## 9. 可靠消息投递（本地消息表 Outbox）
+
+- **解决的问题**：商品上下架"改DB→发MQ"两步裸奔——MQ失败消息消失、ES永不同步，且RabbitMQ对不存在交换机是静默丢弃（convertAndSend不抛异常）
+- **方案**：Transactional Outbox——事务内"改DB+消息落表"同生共死 → afterCommit（registerSynchronization）真正发MQ → Publisher Confirms确认到达才markSent，nack/退回则retry+1 → 定时任务每30秒扫描"待发送且重试<5"补发；mandatory=true防静默丢弃、退回集合防"先return后ack"时序覆盖
+- **关键文件**：
+  - mall库新增 `mall_local_message` 表
+  - mall-admin 新增：`LocalMessageDao`+XML、`LocalMessageService`+Impl、`LocalMessageResendTask`；修改：`RabbitMqConfig`（可靠RabbitTemplate）、`PmsProductService/Impl`（@Transactional + outbox改造）、启动类 @EnableScheduling
+  - mall-search：`ProductSyncReceiver` 改按Map字段解析（跨服务解耦）
+- **验证**：正常上下架消息落表→确认→status=1→ES同步；错误交换机消息保持status=0且retry递增；修正后30秒内自动补发成功
+- **踩坑**：AmqpTemplate接口无CorrelationData重载（在RabbitTemplate上）；Broker先return后ack需防时序覆盖；IDEA半成品class混入jar需clean打包
+
+## 10. Redisson 学习 demo（mall-demo）
 
 - **内容**：① 基础使用——20 线程并发自增计数器，无锁版丢更新（<20）vs 加锁版精确（=20）；② 业务场景——分布式锁 + DB 乐观锁并发扣库存，无锁版复现超卖、锁+乐观锁版精确扣减
 - **关键文件**：`mall-demo/service/impl/RedissonDemoServiceImpl.java`、`RedissonStockDemoServiceImpl.java`、`dao/SkuStockDao.java`
