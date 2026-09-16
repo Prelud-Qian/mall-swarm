@@ -13,6 +13,7 @@ import com.macro.mall.common.api.ResultCode;
 import com.macro.mall.common.constant.AuthConstant;
 import com.macro.mall.common.dto.UserDto;
 import com.macro.mall.common.exception.Asserts;
+import com.macro.mall.common.service.RedisService;
 import com.macro.mall.dao.UmsAdminRoleRelationDao;
 import com.macro.mall.dto.UmsAdminParam;
 import com.macro.mall.dto.UpdateAdminPasswordParam;
@@ -43,6 +44,12 @@ import java.util.stream.Collectors;
 @Service
 public class UmsAdminServiceImpl implements UmsAdminService {
     private static final Logger LOGGER = LoggerFactory.getLogger(UmsAdminServiceImpl.class);
+
+    // 登录失败锁定：同一用户名连续失败5次，锁定10分钟（防暴力破解）
+    private static final String LOGIN_FAIL_KEY_PREFIX = "ums:admin:loginFail:";
+    private static final int LOGIN_MAX_FAIL = 5;
+    private static final long LOGIN_LOCK_SECONDS = 10 * 60;
+
     @Autowired
     private UmsAdminMapper adminMapper;
     @Autowired
@@ -53,6 +60,8 @@ public class UmsAdminServiceImpl implements UmsAdminService {
     private UmsAdminLoginLogMapper loginLogMapper;
     @Autowired
     private UmsAdminCacheService adminCacheService;
+    @Autowired
+    private RedisService redisService;
 
     @Override
     public UmsAdmin getAdminByUsername(String username) {
@@ -87,21 +96,35 @@ public class UmsAdminServiceImpl implements UmsAdminService {
 
     @Override
     public SaTokenInfo login(String username, String password) {
+
+        // 登录失败锁定检查：Redis计数达到上限直接拒绝
+        String failKey = LOGIN_FAIL_KEY_PREFIX + username;
+        Object failCount = redisService.get(failKey);
+        if (failCount != null && Integer.parseInt(String.valueOf(failCount)) >= LOGIN_MAX_FAIL) {
+            Asserts.fail("登录失败次数过多，请10分钟后再试");
+        }
+
         if(StrUtil.isEmpty(username)||StrUtil.isEmpty(password)){
+            recordLoginFail(username);
             Asserts.fail("用户名或密码不能为空！");
         }
         UmsAdmin admin = getAdminByUsername(username);
         if(admin==null){
+            recordLoginFail(username);
             Asserts.fail("找不到该用户！");
         }
         if (!BCrypt.checkpw(password, admin.getPassword())) {
+            recordLoginFail(username);
             Asserts.fail("密码不正确！");
         }
         if(admin.getStatus()!=1){
+            recordLoginFail(username);
             Asserts.fail("该账号已被禁用！");
         }
         // 登录校验成功后，一行代码实现登录
+        // StpUtil.login() 这一行内部干完了"生成 token + 存 Redis + 绑定 loginId"全部工作——这就是 Sa-Token 的"一行登录"。
         StpUtil.login(admin.getId());
+        redisService.del(failKey);
         UserDto userDto = new UserDto();
         userDto.setId(admin.getId());
         userDto.setUsername(admin.getUsername());
@@ -110,12 +133,34 @@ public class UmsAdminServiceImpl implements UmsAdminService {
         List<String> permissionList = resourceList.stream().map(item -> item.getId() + ":" + item.getName()).toList();
         userDto.setPermissionList(permissionList);
         // 将用户信息存储到Session中
+        /**
+         * session 在 StpUtil.login() 那一行就已经创建好了（和 token 同时生成，都存在 Redis 里）
+         * getSession().set(key, userDto) 只是往这个 session 里塞东西：用户信息 + 权限列表
+         *
+         * 它的作用是给后续请求用的：用户带着 token 再来时，服务端凭 token 找到 loginId、再找到 session，
+         * 把里面的 userDto 取出来——比如网关的 StpInterfaceImpl 查权限时就是读这里的权限列表。
+         */
         StpUtil.getSession().set(AuthConstant.STP_ADMIN_INFO,userDto);
         // 获取当前登录用户Token信息
+        /**
+         * 把"钥匙"交给前端。 token 生成后躺在 Redis 里，但前端必须知道这个字符串才能携带它。
+         * getTokenInfo() 把 token 对象取出来（tokenName + tokenValue），
+         * Controller 包进响应返回——前端拿到 eyJ0eXAi... 这段字符串，
+         * 以后拼成 Authorization: Bearer xxx 带在请求头上。
+         */
         SaTokenInfo saTokenInfo = StpUtil.getTokenInfo();
 //        updateLoginTimeByUsername(username);
         insertLoginLog(admin);
         return saTokenInfo;
+    }
+
+    /**
+     * 记录一次登录失败：计数+1并重置锁定时长（每次失败重新计时10分钟）
+     */
+    private void recordLoginFail(String username) {
+        String failKey = LOGIN_FAIL_KEY_PREFIX + username;
+        redisService.incr(failKey, 1);
+        redisService.expire(failKey, LOGIN_LOCK_SECONDS);
     }
 
     /**

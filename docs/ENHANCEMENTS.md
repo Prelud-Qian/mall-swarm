@@ -92,7 +92,15 @@
 - **验证**：正常上下架消息落表→确认→status=1→ES同步；错误交换机消息保持status=0且retry递增；修正后30秒内自动补发成功
 - **踩坑**：AmqpTemplate接口无CorrelationData重载（在RabbitTemplate上）；Broker先return后ack需防时序覆盖；IDEA半成品class混入jar需clean打包
 
-## 10. Redisson 学习 demo（mall-demo）
+## 10. 登录安全增强（失败锁定）
+
+- **解决的问题**：登录接口无失败限制，暴力破解敞口（无限试密码）
+- **方案**：Redis 失败计数锁定——每用户名一个计数器（`ums:admin:loginFail:{username}`），失败+1且重置10分钟过期，满5次直接拒绝（正确密码也挡）；登录成功清零；到期自动解锁
+- **关键文件**：`mall-admin/UmsAdminServiceImpl.login`（锁定检查+4个失败分支计数+成功清零+recordLoginFail）
+- **验证**：5次错误密码后第6次正确密码被拒"登录失败次数过多"；DEL解锁后登录成功且计数清零
+- **扩展**：portal 会员登录可套同款逻辑（UmsMemberServiceImpl.login）
+
+## 11. Redisson 学习 demo（mall-demo）
 
 - **内容**：① 基础使用——20 线程并发自增计数器，无锁版丢更新（<20）vs 加锁版精确（=20）；② 业务场景——分布式锁 + DB 乐观锁并发扣库存，无锁版复现超卖、锁+乐观锁版精确扣减
 - **关键文件**：`mall-demo/service/impl/RedissonDemoServiceImpl.java`、`RedissonStockDemoServiceImpl.java`、`dao/SkuStockDao.java`
