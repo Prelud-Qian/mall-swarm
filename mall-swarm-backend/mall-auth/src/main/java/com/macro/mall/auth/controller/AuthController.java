@@ -48,4 +48,19 @@ public class AuthController {
             return CommonResult.failed("clientId不正确");
         }
     }
+
+    @Operation(summary = "刷新token")
+    @RequestMapping(value = "/refresh", method = RequestMethod.POST)
+    @ResponseBody
+    public CommonResult refresh(@RequestParam String clientId,
+                                @RequestParam String refreshToken) {
+        if (AuthConstant.ADMIN_CLIENT_ID.equals(clientId)) {
+            return adminService.refreshToken(refreshToken);
+        } else if (AuthConstant.PORTAL_CLIENT_ID.equals(clientId)) {
+            // TODO: portal会员侧refreshToken（同款逻辑，UmsMemberService实现后再接）
+            return CommonResult.failed("会员端刷新暂未支持");
+        }
+        return CommonResult.failed("clientId不正确");
+    }
+
 }

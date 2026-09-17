@@ -7,6 +7,7 @@ import com.macro.mall.model.*;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 后台管理员Service
@@ -28,7 +29,12 @@ public interface UmsAdminService {
      * @param username 用户名
      * @param password 密码
      */
-    SaTokenInfo login(String username, String password);
+    Map<String, Object> login(String username, String password);
+
+    /**
+     * 用refreshToken换发新的accessToken和refreshToken
+     */
+    Map<String, Object> refreshToken(String refreshToken);
 
     /**
      * 根据用户id获取用户

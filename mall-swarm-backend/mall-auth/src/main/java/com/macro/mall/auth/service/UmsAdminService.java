@@ -3,9 +3,9 @@ package com.macro.mall.auth.service;
 import com.macro.mall.auth.domain.UmsAdminLoginParam;
 import com.macro.mall.common.api.CommonResult;
 import org.springframework.cloud.openfeign.FeignClient;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.Map;
 
 /**
  * @auther macrozheng
@@ -18,4 +18,8 @@ public interface UmsAdminService {
 
     @PostMapping("/admin/login")
     CommonResult login(@RequestBody UmsAdminLoginParam umsAdminLoginParam);
+
+    @PostMapping("/admin/refreshToken")
+    CommonResult<Map<String, Object>> refreshToken(@RequestParam("refreshToken") String refreshToken);
+
 }

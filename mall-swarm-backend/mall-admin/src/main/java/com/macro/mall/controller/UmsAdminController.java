@@ -55,15 +55,21 @@ public class UmsAdminController {
     @RequestMapping(value = "/login", method = RequestMethod.POST)
     @ResponseBody
     public CommonResult login(@Validated @RequestBody UmsAdminLoginParam umsAdminLoginParam) {
-        SaTokenInfo saTokenInfo  = adminService.login(umsAdminLoginParam.getUsername(), umsAdminLoginParam.getPassword());
-        if (saTokenInfo  == null) {
+        Map<String, Object> tokenMap = adminService.login(umsAdminLoginParam.getUsername(), umsAdminLoginParam.getPassword());
+        if (tokenMap  == null) {
             return CommonResult.validateFailed("用户名或密码错误");
         }
-        Map<String, String> tokenMap = new HashMap<>();
-        tokenMap.put("token", saTokenInfo.getTokenValue() );
-        tokenMap.put("tokenHead", tokenHead+" ");
+
         return CommonResult.success(tokenMap);
     }
+
+    @Operation(summary = "刷新token")
+    @RequestMapping(value = "/refreshToken", method = RequestMethod.POST)
+    @ResponseBody
+    public CommonResult refreshToken(@RequestParam String refreshToken) {
+        return CommonResult.success(adminService.refreshToken(refreshToken));
+    }
+
 
     @Operation(summary = "获取当前登录用户信息")
     @RequestMapping(value = "/info", method = RequestMethod.GET)

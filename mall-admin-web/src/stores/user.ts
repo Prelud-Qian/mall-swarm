@@ -13,6 +13,7 @@ export const useUserStore = defineStore(
       avatar: '',
       roles: [],
       token: '',
+      refreshToken: '',
       menus: [],
     })
 
@@ -21,6 +22,7 @@ export const useUserStore = defineStore(
       const res = await adminLoginAPI(loginParam)
       const tokenStr = res.data.tokenHead + res.data.token
       userInfo.value.token = tokenStr
+      userInfo.value.refreshToken = res.data.refreshToken
       userInfo.value.username = loginParam.username
       userInfo.value.password = loginParam.password
       await getUserInfo()
@@ -43,12 +45,14 @@ export const useUserStore = defineStore(
     const userLogout = async () => {
       await adminLogoutAPI()
       userInfo.value.token = ''
+      userInfo.value.refreshToken = ''
       userInfo.value.roles = []
     }
 
     // 前端登出
     const fedLogout = () => {
       userInfo.value.token = ''
+      userInfo.value.refreshToken = ''
     }
 
     return {

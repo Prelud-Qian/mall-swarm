@@ -14,6 +14,8 @@ export type LoginResult = {
   tokenHead: string
   /** 登录的token */
   token: string
+  /** 刷新token（7天有效，accessToken过期后换发用） */
+  refreshToken: string
 }
 
 /** 用户信息结果封装 */
@@ -34,6 +36,8 @@ export type UserInfo = Pick<UserInfoResult, 'username' | 'menus' | 'roles'> & {
   password: string
   /** 登录token */
   token: string
+  /** 刷新token */
+  refreshToken: string
   /** 头像 */
   avatar
 }

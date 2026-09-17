@@ -50,6 +50,11 @@ public class UmsAdminServiceImpl implements UmsAdminService {
     private static final int LOGIN_MAX_FAIL = 5;
     private static final long LOGIN_LOCK_SECONDS = 10 * 60;
 
+    // refreshToken：Redis存储key前缀与有效期（7天，单位秒）
+    private static final String REDIS_KEY_REFRESH_TOKEN = "ums:admin:refreshToken:";
+    private static final long REFRESH_TOKEN_TIMEOUT = 7 * 24 * 60 * 60;
+
+
     @Autowired
     private UmsAdminMapper adminMapper;
     @Autowired
@@ -94,8 +99,41 @@ public class UmsAdminServiceImpl implements UmsAdminService {
         return umsAdmin;
     }
 
+    /**
+     * 第 0 天 9:00：小明登录
+     * 他输入 admin / admin123456，login 方法依次跑：
+     *
+     * 第一关防守：查 Redis 里 ums:admin:loginFail:admin——没有（第一次来），放行。
+     * 第二关验人：数据库里查到 admin、BCrypt 比对密码一致、状态正常 → 通过。
+     * 第三关发证，在 Redis 里留下 3 个新 key：
+     *
+     *
+     * ① Authorization:login:token:eyJ...      = 3(adminId)   [2小时后过期]  ← accessToken
+     * ② Authorization:login:session:3          = {用户信息+权限}              ← 会话数据
+     * ③ ums:admin:refreshToken:550e8400...     = 3(adminId)   [7天后过期]    ← refreshToken
+     * 前端拿到 {token, tokenHead, refreshToken} 三样存起来。
+     *
+     * 9:00 ~ 11:00：正常使用（accessToken 在有效期内）
+     * 小明每次点页面，请求头带 Authorization: Bearer eyJ... → 网关拿 token 拼 key ① 查 Redis → 查得到 = 有效 → 放行。login 方法完全不参与，只是 key ① 在服务。
+     *
+     * 11:00：accessToken 到期（2 小时到了）
+     * Redis 自动删掉 key ①。小明下一个请求 → 网关查 key ① → 查不到 → 返回 401。
+     *
+     * 前端拦截器自动接管（用户无感）：拿 key ③ 的 refreshToken 调换发接口 → 后端查 key ③ → 还在 → 知道这是 adminId=3 → 重新执行 ⑥（StpUtil.login(3)）签发新 accessToken（新的 key ①），同时旧 refreshToken 作废、发新 refreshToken（防重放）→ 前端拿到新凭证重试刚才的请求。
+     *
+     * 小明全程无感，只是 Redis 里的 key 换了新的。
+     *
+     * 第 0 天 ~ 第 7 天：这个"到期→换发"循环一直转
+     * 每次换发，refreshToken 也换新（7 天重新计时）——所以只要小明 7 天内登录过一次系统，就一直免登录。
+     *
+     * 第 7 天：refreshToken 也过期了
+     * 小明 7 天没来。key ③ 被 Redis 自动删除。他再访问 → accessToken 早已过期（401）→ 前端拿 refreshToken 换发 → 后端查 key ③ → 查不到 → 返回"刷新令牌无效"→ 前端跳登录页 → 小明重新输账号密码 → 回到第 0 天的流程。
+     * @param username 用户名
+     * @param password 密码
+     * @return
+     */
     @Override
-    public SaTokenInfo login(String username, String password) {
+    public Map<String, Object> login(String username, String password) {
 
         // 登录失败锁定检查：Redis计数达到上限直接拒绝
         String failKey = LOGIN_FAIL_KEY_PREFIX + username;
@@ -149,9 +187,44 @@ public class UmsAdminServiceImpl implements UmsAdminService {
          * 以后拼成 Authorization: Bearer xxx 带在请求头上。
          */
         SaTokenInfo saTokenInfo = StpUtil.getTokenInfo();
-//        updateLoginTimeByUsername(username);
+        // 生成refreshToken：UUID随机串，绑定loginId存Redis，7天过期
+        // 为什么自己管：Sa-Token没有内置refresh机制，自管最简单可控
+        String refreshToken = UUID.randomUUID().toString().replace("-", "");
+        redisService.set(REDIS_KEY_REFRESH_TOKEN + refreshToken, admin.getId(), REFRESH_TOKEN_TIMEOUT);
         insertLoginLog(admin);
-        return saTokenInfo;
+
+        // 组装返回：前端需要三个东西——请求凭证、凭证前缀、换新凭证的钥匙
+        Map<String, Object> result = new HashMap<>();
+        result.put("token", saTokenInfo.getTokenValue());
+        result.put("tokenHead", "Bearer ");
+        result.put("refreshToken", refreshToken);
+        return result;
+    }
+
+    /**
+     * refreshToken 换发接口
+     */
+    @Override
+    public Map<String, Object> refreshToken(String refreshToken) {
+        // 拿前端传来的"后端login方法中生成的 refreshToken"拼key查Redis——查得到=有效（7天内），查不到=过期
+        Object loginId = redisService.get(REDIS_KEY_REFRESH_TOKEN + refreshToken);
+        if (loginId == null) {
+            Asserts.fail("刷新令牌无效或已过期，请重新登录");
+        }
+        Long adminId = Long.valueOf(String.valueOf(loginId));
+        // 重新签发accessToken（和登录时同一个动作：StpUtil.login）
+        StpUtil.login(adminId);
+        SaTokenInfo saTokenInfo = StpUtil.getTokenInfo();
+        // 旧refreshToken一次性作废，并换发新的
+        redisService.del(REDIS_KEY_REFRESH_TOKEN + refreshToken);
+        String newRefreshToken = UUID.randomUUID().toString().replace("-", "");
+        redisService.set(REDIS_KEY_REFRESH_TOKEN + newRefreshToken, adminId, REFRESH_TOKEN_TIMEOUT);
+        // 返回新凭证给前端
+        Map<String, Object> result = new HashMap<>();
+        result.put("token", saTokenInfo.getTokenValue());
+        result.put("tokenHead", "Bearer ");
+        result.put("refreshToken", newRefreshToken);
+        return result;
     }
 
     /**

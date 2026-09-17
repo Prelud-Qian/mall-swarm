@@ -100,7 +100,15 @@
 - **验证**：5次错误密码后第6次正确密码被拒"登录失败次数过多"；DEL解锁后登录成功且计数清零
 - **扩展**：portal 会员登录可套同款逻辑（UmsMemberServiceImpl.login）
 
-## 11. Redisson 学习 demo（mall-demo）
+## 11. Token 双凭证与自动换发（accessToken + refreshToken）
+
+- **解决的问题**：accessToken 有效期 7 天过长（泄露窗口大），缩短后用户频繁重新登录体验差
+- **方案**：双凭证——accessToken 2 小时（Sa-Token timeout: 7200）+ refreshToken 7 天（UUID 随机串存 Redis，key `ums:admin:refreshToken:{UUID}` value=loginId）。前端 axios 拦截器捕获 401 后自动调 `/auth/refresh` 换发（旧 refreshToken 一次性作废、滚动换新），成功则用新 token 重试原请求（用户无感），失败才跳登录页
+- **关键文件**：admin `UmsAdminServiceImpl`（登录签发+换发）、`UmsAdminController`、auth `AuthController`/Feign；前端 `utils/http.ts`（401 换发重试）、`stores/user.ts`、`types/admin.d.ts`、env 加 `VITE_AUTH_SERVER_URL`
+- **验证**：换发成功返回新双凭证；旧 refreshToken 二次换发被拒（防重放）；新 accessToken 的 Redis TTL=7199 秒
+- **设计要点**：凭证类 Redis key 用凭证本身（不可猜），服务端档案类才用 id 做 key；refreshToken 每次换发滚动更新，凭证暴露面最小化
+
+## 12. Redisson 学习 demo（mall-demo）
 
 - **内容**：① 基础使用——20 线程并发自增计数器，无锁版丢更新（<20）vs 加锁版精确（=20）；② 业务场景——分布式锁 + DB 乐观锁并发扣库存，无锁版复现超卖、锁+乐观锁版精确扣减
 - **关键文件**：`mall-demo/service/impl/RedissonDemoServiceImpl.java`、`RedissonStockDemoServiceImpl.java`、`dao/SkuStockDao.java`
