@@ -52,6 +52,7 @@ mall 商城全家桶：Spring Cloud 微服务后端 + 后台管理前端 + 移�
 ## 更多信息
 
 - 功能增强总览（每个功能的方案、文件、验证结果、踩坑记录）：[docs/ENHANCEMENTS.md](docs/ENHANCEMENTS.md)
+- 压测与验证报告（各模块实测数据，面试展示用）：[docs/PERFORMANCE.md](docs/PERFORMANCE.md)
 - 秒杀设计文档：[docs/superpowers/specs/2026-09-04-seckill-sync-design.md](docs/superpowers/specs/2026-09-04-seckill-sync-design.md)
 - 后端细节：[mall-swarm-backend/CLAUDE.md](mall-swarm-backend/CLAUDE.md)
 - 后台管理前端细节：[mall-admin-web/CLAUDE.md](mall-admin-web/CLAUDE.md)
