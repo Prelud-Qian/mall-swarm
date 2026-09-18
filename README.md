@@ -1,6 +1,6 @@
-# mall-swarm
+# mall-swarm-refined
 
-mall 商城全家桶：Spring Cloud 微服务后端 + 后台管理前端 + 移动端，单仓库管理三个子项目。
+mall 商城全家桶：Spring Cloud 微服务后端 + 后台管理前端 + 移动端，单仓库管理三个子项目。基于 macrozheng/mall-swarm 深度优化（并发防护、缓存、检索、限流、可靠消息、测试），原仓库名 mall-swarm。
 
 ## 子项目
 
