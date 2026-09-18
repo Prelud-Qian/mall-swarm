@@ -108,7 +108,15 @@
 - **验证**：换发成功返回新双凭证；旧 refreshToken 二次换发被拒（防重放）；新 accessToken 的 Redis TTL=7199 秒
 - **设计要点**：凭证类 Redis key 用凭证本身（不可猜），服务端档案类才用 id 做 key；refreshToken 每次换发滚动更新，凭证暴露面最小化
 
-## 12. Redisson 学习 demo（mall-demo）
+## 12. 自动化单元测试（JUnit 5 + Mockito）
+
+- **解决的问题**：此前所有验证靠手工压测，无自动化质量保障
+- **方案**：全 Mock 单元测试覆盖两个最复杂模块的业务分支——秒杀下单 6 用例（校验/限购/库存/成功/锁库存失败的回滚补偿精确断言）、商品详情缓存三兄弟 7 用例（命中/空值命中/双重检查/回源写缓存随机过期区间断言/拿锁失败重读/查无写空值/快速失败）
+- **关键文件**：`mall-portal/src/test/java/com/macro/mall/portal/service/FlashPromotionOrderServiceImplTest.java`、`PmsPortalProductServiceImplTest.java`
+- **验证**：13 用例全绿（mvn -pl mall-portal test -DskipTests=false -Dtest=...）
+- **踩坑**：Mockito 严格模式对公共 setUp stub 报 UnnecessaryStubbing（类级 LENIENT）；void 方法必须 doAnswer().when() 语法；Redisson RBucket 泛型 mock 用原始类型；异步 Executor 需同步执行替身防 Future 挂起
+
+## 13. Redisson 学习 demo（mall-demo）
 
 - **内容**：① 基础使用——20 线程并发自增计数器，无锁版丢更新（<20）vs 加锁版精确（=20）；② 业务场景——分布式锁 + DB 乐观锁并发扣库存，无锁版复现超卖、锁+乐观锁版精确扣减
 - **关键文件**：`mall-demo/service/impl/RedissonDemoServiceImpl.java`、`RedissonStockDemoServiceImpl.java`、`dao/SkuStockDao.java`
