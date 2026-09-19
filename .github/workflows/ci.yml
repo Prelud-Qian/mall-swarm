@@ -19,6 +19,10 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: 编译并运行单元测试（秒杀 + 缓存三兄弟，全Mock无外部依赖）
+      - name: 安装依赖模块（跳过测试）
         working-directory: mall-swarm-backend
-        run: mvn -B -pl mall-portal -am test -DskipTests=false -DfailIfNoTests=false -Dtest=FlashPromotionOrderServiceImplTest,PmsPortalProductServiceImplTest
+        run: mvn -B -pl mall-common,mall-mbg -am install -DskipTests=true
+
+      - name: 运行单元测试（秒杀 + 缓存三兄弟，全Mock无外部依赖）
+        working-directory: mall-swarm-backend
+        run: mvn -B -pl mall-portal test -DskipTests=false -Dtest=FlashPromotionOrderServiceImplTest,PmsPortalProductServiceImplTest
