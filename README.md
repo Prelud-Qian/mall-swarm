@@ -51,6 +51,7 @@ mall 商城全家桶：Spring Cloud 微服务后端 + 后台管理前端 + 移�
 - **Token 双凭证自动换发**：accessToken 2 小时 + refreshToken 7 天，前端拦截器 401 自动换发重试（用户无感）
 - **自动化单元测试**：秒杀 + 缓存三兄弟 13 个用例（JUnit 5 + Mockito 全 Mock）
 - **Seata 分布式事务演示**：AT 模式全局事务（demo 发起 + portal 参与），失败全局回滚实测验证
+- **秒杀前端入口**：首页秒杀专区"立即抢购"按钮，走通秒杀下单完整链路
 - **Redisson 使用 demo**（mall-demo）：分布式锁基础使用、分布式锁 + DB 乐观锁扣库存演示
 
 ## 更多信息

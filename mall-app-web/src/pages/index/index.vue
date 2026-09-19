@@ -108,6 +108,7 @@
         <text class="title clamp">{{ item.name }}</text>
         <text class="title2 clamp">{{ item.subTitle }}</text>
         <text class="price">￥{{ item.flashPromotionPrice || item.price }}</text>
+        <view class="flash-buy-btn" @click.stop="handleFlashBuy(item)">立即抢购</view>
       </view>
     </view>
 
@@ -206,7 +207,9 @@ import {
   onNavigationBarSearchInputClicked,
 } from '@dcloudio/uni-app'
 import { getHomeContentAPI, getRecommendProductListAPI } from '@/apis/home'
-import type { SmsHomeAdvertise, HomeFlashPromotion } from '@/types/home'
+import { generateFlashPromotionOrderAPI } from '@/apis/flashPromotion'
+import { fetchAddressListAPI } from '@/apis/address'
+import type { SmsHomeAdvertise, HomeFlashPromotion, FlashPromotionProduct } from '@/types/home'
 import type { PmsProduct } from '@/types/product'
 import type { PmsBrand } from '@/types/brand'
 import type { PageParam } from '@/types/common'
@@ -368,6 +371,48 @@ const handleNavToDetailPage = (item: PmsProduct) => {
   uni.navigateTo({
     url: `/pages/product/product?id=${id}`,
   })
+}
+
+// 秒杀抢购：登录检查 → 取默认收货地址 → 调秒杀下单接口 → 结果提示
+const handleFlashBuy = async (item: FlashPromotionProduct) => {
+  // 1. 登录检查
+  const token = uni.getStorageSync('token')
+  if (!token) {
+    uni.showModal({
+      title: '提示',
+      content: '请先登录',
+      confirmText: '去登录',
+      success: (res) => {
+        if (res.confirm) {
+          uni.navigateTo({ url: '/pages/public/login' })
+        }
+      },
+    })
+    return
+  }
+  // 2. 关联ID兜底
+  if (!item.flashPromotionRelationId) {
+    uni.showToast({ title: '该商品未参与秒杀', icon: 'none' })
+    return
+  }
+  // 3. 取收货地址（简化：取第一个，没有则提示去添加）
+  const addressRes = await fetchAddressListAPI()
+  if (!addressRes.data || addressRes.data.length === 0) {
+    uni.showToast({ title: '请先添加收货地址', icon: 'none' })
+    return
+  }
+  const address = addressRes.data[0]
+  // 4. 秒杀下单
+  const res = await generateFlashPromotionOrderAPI({
+    flashPromotionRelationId: item.flashPromotionRelationId,
+    memberReceiveAddressId: address.id,
+    phone: address.phoneNumber,
+  })
+  if (res.code === 200) {
+    uni.showToast({ title: '抢购成功，请尽快支付', icon: 'none' })
+  } else {
+    uni.showToast({ title: res.message || '抢购失败', icon: 'none' })
+  }
 }
 
 // 跳转到广告详情页
@@ -783,6 +828,16 @@ page {
 
     .price {
       color: $uni-color-primary;
+    }
+
+    .flash-buy-btn {
+      margin-top: 10rpx;
+      padding: 8rpx 0;
+      text-align: center;
+      font-size: 24rpx;
+      color: #fff;
+      background: $uni-color-error;
+      border-radius: 8rpx;
     }
   }
 }

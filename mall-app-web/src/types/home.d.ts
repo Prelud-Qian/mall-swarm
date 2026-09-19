@@ -1,6 +1,18 @@
 import type { PmsBrand } from './brand'
 import type { PmsProduct } from './product'
 
+/** 秒杀商品（含秒杀关联ID，抢购下单用） */
+export type FlashPromotionProduct = PmsProduct & {
+  /** 秒杀价 */
+  flashPromotionPrice?: number
+  /** 秒杀库存 */
+  flashPromotionCount?: number
+  /** 每人限购 */
+  flashPromotionLimit?: number
+  /** 秒杀关联ID（下单参数） */
+  flashPromotionRelationId?: number
+}
+
 /** 专题信息 */
 export type CmsSubject = {
   /** ID */
@@ -76,7 +88,7 @@ export type HomeFlashPromotion = {
   /** 下场结束时间 */
   nextEndTime: string
   /** 商品列表 */
-  productList: PmsProduct[]
+  productList: FlashPromotionProduct[]
 }
 
 /** 首页内容返回结果 */

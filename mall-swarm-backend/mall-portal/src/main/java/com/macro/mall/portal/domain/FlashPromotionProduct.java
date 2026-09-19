@@ -16,4 +16,5 @@ public class FlashPromotionProduct extends PmsProduct{
     private BigDecimal flashPromotionPrice;
     private Integer flashPromotionCount;
     private Integer flashPromotionLimit;
+    private Long flashPromotionRelationId;
 }

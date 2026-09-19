@@ -149,7 +149,15 @@ CI（持续集成）= 每次 push 代码，云端自动执行流水线验证代�
 1. **工作目录**：CI 默认在仓库根执行，而 Maven 工程在 mall-swarm-backend 子目录（reactor 找不到模块）——step 上必须加 `working-directory: mall-swarm-backend`
 2. **-Dtest 参数污染**：`-am test` 会把 `-Dtest=测试类` 参数应用到依赖模块（mall-common 无该测试类导致构建失败）——拆成两步：依赖模块先 `install -DskipTests=true`，再对 mall-portal 单独执行 `test -Dtest=...`
 
-## 15. Redisson 学习 demo（mall-demo）
+## 15. 秒杀前端入口（mall-app-web）
+
+- **解决的问题**：秒杀后端闭环完整但前端只有展示无购买入口——功能只能接口演示，无法页面体验
+- **方案**：首页秒杀专区商品卡加"立即抢购"按钮（@click.stop 阻止跳详情），点击后登录检查 → 取默认收货地址 → 调秒杀下单接口 → 结果提示；后端补下单必需的关联ID——`FlashPromotionProduct` 加 `flashPromotionRelationId` 字段、HomeDao 秒杀商品 SQL 查 `pr.id` 并映射
+- **关键文件**：后端 `FlashPromotionProduct.java`、`HomeDao.xml`；前端 `types/home.d.ts`（FlashPromotionProduct 类型）、新建 `apis/flashPromotion.ts`、`pages/index/index.vue`（按钮+handleFlashBuy+样式）
+- **验证**：首页接口返回 relationId（21）；接口下单成功（orderId=110）走通后端完整链路；前端 H5 构建通过
+- **注意**：种子数据秒杀活动日期过期、部分 relation 价格/库存为 NULL——测试需先修正数据
+
+## 16. Redisson 学习 demo（mall-demo）
 
 - **内容**：① 基础使用——20 线程并发自增计数器，无锁版丢更新（<20）vs 加锁版精确（=20）；② 业务场景——分布式锁 + DB 乐观锁并发扣库存，无锁版复现超卖、锁+乐观锁版精确扣减
 - **关键文件**：`mall-demo/service/impl/RedissonDemoServiceImpl.java`、`RedissonStockDemoServiceImpl.java`、`dao/SkuStockDao.java`
