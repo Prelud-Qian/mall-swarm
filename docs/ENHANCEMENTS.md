@@ -116,7 +116,15 @@
 - **验证**：13 用例全绿（mvn -pl mall-portal test -DskipTests=false -Dtest=...）
 - **踩坑**：Mockito 严格模式对公共 setUp stub 报 UnnecessaryStubbing（类级 LENIENT）；void 方法必须 doAnswer().when() 语法；Redisson RBucket 泛型 mock 用原始类型；异步 Executor 需同步执行替身防 Future 挂起
 
-## 13. Redisson 学习 demo（mall-demo）
+## 13. Seata 分布式事务演示（AT 模式）
+
+- **解决的问题**：学习分布式事务落地——单库项目无真实跨服务事务场景，以 demo 模块演示全局事务的完整机制
+- **方案**：本机部署 Seata Server 2.0.0（TC，8091 RPC/7091 控制台，file 存储，Maven 中央 jar 组装运行于 D:\seata-run）；mall 库建 undo_log 表；demo 服务 @GlobalTransactional 发起（本地写品牌 + Feign 调 portal 写品牌），portal 作为 RM 参与者；失败分支全局回滚、成功分支两端提交
+- **关键文件**：`mall-demo/SeataDemoServiceImpl`（@GlobalTransactional + Feign + 业务码检查）、`mall-demo/SeataDemoController`、`mall-portal/SeataDemoController`、两服务 pom/yml（seata-spring-boot-starter + tx-service-group + grouplist）、根目录 seata-server.bat
+- **验证**：success=false 时接口 500 且 demo 记录数 4→4 不变（回滚生效）；success=true 时两端各 +1
+- **踩坑**：TC 部署网络封锁（最终用 Maven jar 组装方案）；2.x 的 server.port 是控制台端口而 RPC 端口是 seata.server.service-port；file 注册模式必须显式配 grouplist；**Feign 对 HTTP 200+code 500 不抛异常，调用方必须检查业务码否则全局事务"假装成功"**
+
+## 14. Redisson 学习 demo（mall-demo）
 
 - **内容**：① 基础使用——20 线程并发自增计数器，无锁版丢更新（<20）vs 加锁版精确（=20）；② 业务场景——分布式锁 + DB 乐观锁并发扣库存，无锁版复现超卖、锁+乐观锁版精确扣减
 - **关键文件**：`mall-demo/service/impl/RedissonDemoServiceImpl.java`、`RedissonStockDemoServiceImpl.java`、`dao/SkuStockDao.java`

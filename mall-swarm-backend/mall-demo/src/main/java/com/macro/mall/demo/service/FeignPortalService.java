@@ -17,4 +17,8 @@ public interface FeignPortalService {
 
     @GetMapping("/cart/list")
     CommonResult list();
+
+    @PostMapping("/brand/txDemo")
+    CommonResult txBrand(@RequestParam("success") boolean success);
+
 }
