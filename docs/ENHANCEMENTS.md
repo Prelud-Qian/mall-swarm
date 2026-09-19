@@ -126,10 +126,28 @@
 
 ## 14. CI/CD 自动测试流水线（GitHub Actions）
 
-- **解决的问题**：13 个单测只在本机手动跑，push 后无自动验证，代码可能"改坏测试"而不自知
-- **方案**：`.github/workflows/ci.yml`——push/PR 到 master 自动触发：装 JDK 17 → 安装依赖模块（跳过测试）→ 只在 mall-portal 跑两个单测类；README 挂 badge 实时显示状态
-- **验证**：三次迭代后全绿（前两次红叉来自两个坑）
-- **踩坑**：① CI 工作目录是仓库根而 Maven 工程在 mall-swarm-backend 子目录，必须加 working-directory；② `-am test` 会把 -Dtest 参数污染到无测试的依赖模块，改为"依赖先 install 跳过测试 + portal 单独 test"两步
+### 这是什么
+
+CI（持续集成）= 每次 push 代码，云端自动执行流水线验证代码质量。本项目用 GitHub Actions 实现——配置文件是仓库根目录 `.github/workflows/ci.yml`，README 顶部挂了状态 badge（绿=通过、红=失败），面试展示仓库时一眼可见"测试自动通过"。
+
+### 解决了什么问题
+
+13 个单元测试此前只能本机手动跑，push 之后没有任何自动验证——某次改动破坏了秒杀或缓存逻辑，可能要等到下次手动测试才发现。CI 把"偶尔手动跑"变成"每次提交自动验证"。
+
+### 做了什么
+
+流水线三步（每次 push/PR 到 master 自动触发）：① 装 JDK 17（temurin 发行版）→ ② 安装 mall-common/mall-mbg 依赖模块（跳过测试）→ ③ 只在 mall-portal 跑两个测试类共 13 个用例（秒杀 6 个 + 缓存三兄弟 7 个，全 Mock 无外部依赖所以云端可直接跑）。全部通过打绿勾，任一断言失败打红叉并通知。
+
+### 怎么用
+
+- 触发：不需要任何操作——每次 git push 到 master 自动跑
+- 查看：GitHub 仓库 Actions 标签页，每条记录绿勾/红叉；失败点进 job 看日志定位
+- 日常意义：改坏秒杀或缓存逻辑的提交，推送后立刻红叉——质量问题在提交时暴露，而不是上线后
+
+### 踩坑记录（两次红叉的教训）
+
+1. **工作目录**：CI 默认在仓库根执行，而 Maven 工程在 mall-swarm-backend 子目录（reactor 找不到模块）——step 上必须加 `working-directory: mall-swarm-backend`
+2. **-Dtest 参数污染**：`-am test` 会把 `-Dtest=测试类` 参数应用到依赖模块（mall-common 无该测试类导致构建失败）——拆成两步：依赖模块先 `install -DskipTests=true`，再对 mall-portal 单独执行 `test -Dtest=...`
 
 ## 15. Redisson 学习 demo（mall-demo）
 
