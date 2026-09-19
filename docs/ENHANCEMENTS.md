@@ -124,7 +124,14 @@
 - **验证**：success=false 时接口 500 且 demo 记录数 4→4 不变（回滚生效）；success=true 时两端各 +1
 - **踩坑**：TC 部署网络封锁（最终用 Maven jar 组装方案）；2.x 的 server.port 是控制台端口而 RPC 端口是 seata.server.service-port；file 注册模式必须显式配 grouplist；**Feign 对 HTTP 200+code 500 不抛异常，调用方必须检查业务码否则全局事务"假装成功"**
 
-## 14. Redisson 学习 demo（mall-demo）
+## 14. CI/CD 自动测试流水线（GitHub Actions）
+
+- **解决的问题**：13 个单测只在本机手动跑，push 后无自动验证，代码可能"改坏测试"而不自知
+- **方案**：`.github/workflows/ci.yml`——push/PR 到 master 自动触发：装 JDK 17 → 安装依赖模块（跳过测试）→ 只在 mall-portal 跑两个单测类；README 挂 badge 实时显示状态
+- **验证**：三次迭代后全绿（前两次红叉来自两个坑）
+- **踩坑**：① CI 工作目录是仓库根而 Maven 工程在 mall-swarm-backend 子目录，必须加 working-directory；② `-am test` 会把 -Dtest 参数污染到无测试的依赖模块，改为"依赖先 install 跳过测试 + portal 单独 test"两步
+
+## 15. Redisson 学习 demo（mall-demo）
 
 - **内容**：① 基础使用——20 线程并发自增计数器，无锁版丢更新（<20）vs 加锁版精确（=20）；② 业务场景——分布式锁 + DB 乐观锁并发扣库存，无锁版复现超卖、锁+乐观锁版精确扣减
 - **关键文件**：`mall-demo/service/impl/RedissonDemoServiceImpl.java`、`RedissonStockDemoServiceImpl.java`、`dao/SkuStockDao.java`
